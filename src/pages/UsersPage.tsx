@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
-  IconButton, Select, MenuItem, TextField, Button, Box
+  IconButton, Select, MenuItem, TextField
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
-import axios from 'axios';
+import { api } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -19,22 +19,19 @@ interface User {
 const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT'];
 
 export const UsersPage: React.FC = () => {
-  const { token, user: currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (token) {
-      axios.get<User[]>('http://localhost:3000/api/v1/users', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+    // El backend usa cookie, no token manual
+    api.get<User[]>('/users')
       .then(res => setUsers(res.data))
       .catch(() => setUsers([]));
-    }
-  }, [token]);
+  }, []);
 
   const handleEdit = (user: User) => {
     setEditId(user.id);
@@ -42,15 +39,11 @@ export const UsersPage: React.FC = () => {
     setEditRole(user.role);
   };
 
-  const handleSave = async (id: number) => {
+  const handleSave = async (id: string) => {
     setLoading(true);
     try {
-      await axios.patch(`http://localhost:3000/api/v1/users/${id}`, { name: editName }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      await axios.patch(`http://localhost:3000/api/v1/users/${id}/role`, { role: editRole }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.patch(`/users/${id}`, { name: editName });
+      await api.patch(`/users/${id}/role`, { role: editRole });
       setUsers(users.map(u =>
         u.id === id ? { ...u, name: editName, role: editRole } : u
       ));
@@ -59,12 +52,10 @@ export const UsersPage: React.FC = () => {
     setLoading(false);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      await axios.delete(`http://localhost:3000/api/v1/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/users/${id}`);
       setUsers(users.filter(u => u.id !== id));
     } catch {}
     setLoading(false);

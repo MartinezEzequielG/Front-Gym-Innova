@@ -10,10 +10,16 @@ import {
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { api } from '../context/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
+
+interface LoginResponse {
+  ok: boolean;
+  idToken?: string;
+}
 
 export const LoginPage: React.FC = () => {
-  const { login, loginWithGoogle } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,13 +34,14 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:3000/api/v1/auth/login', {
-        email,
-        password,
-      });
-      const token = res.data.token;
-      await login(token);
-      window.location.href = '/dashboard';
+      // Si tu backend soporta login por email/password, ajusta el endpoint y payload
+      const res = await api.post<LoginResponse>('/auth/login', { email, password });
+      if (res.data.ok) {
+        await login(res.data.idToken || '');
+        window.location.href = '/dashboard';
+      } else {
+        setError('Credenciales incorrectas');
+      }
     } catch {
       setError('Credenciales incorrectas');
     } finally {
@@ -148,23 +155,18 @@ export const LoginPage: React.FC = () => {
               {loading ? <CircularProgress size={24} sx={{ color: '#222' }} /> : 'Ingresar'}
             </Button>
 
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<GoogleIcon />}
-              sx={{
-                color: '#555',
-                borderColor: '#ccc',
-                fontWeight: 600,
-                fontSize: '0.95rem',
-                py: 1,
-                textTransform: 'none',
-                '&:hover': { borderColor: '#FFD600', color: '#222' },
+            <GoogleLogin
+              onSuccess={async (credentialResponse) => {
+                if (credentialResponse.credential) {
+                  await login(credentialResponse.credential);
+                  window.location.href = '/dashboard';
+                }
               }}
-              onClick={loginWithGoogle}
-            >
-              Ingresar con Google
-            </Button>
+              onError={() => {
+                setError('Error al iniciar sesión con Google');
+              }}
+              width="100%"
+            />
           </form>
         </Paper>
       </Fade>

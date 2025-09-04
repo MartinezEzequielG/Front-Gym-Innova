@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Paper, Typography, Box } from '@mui/material';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
+import { api } from '../context/AuthContext';
 
 interface User {
   name: string;
@@ -10,20 +9,17 @@ interface User {
 }
 
 export const SettingsPage: React.FC = () => {
-  const { token } = useAuth();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    if (token) {
-      axios.get<User>('http://localhost:3000/api/v1/users/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+    // El backend usa cookie, no token manual
+    api.get<{ ok: boolean; user: User }>('/auth/me')
       .then(res => {
-        setUser(res.data);
+        if (res.data.ok) setUser(res.data.user);
+        else setUser(null);
       })
       .catch(() => setUser(null));
-    }
-  }, [token]);
+  }, []);
 
   return (
     <Paper sx={{ p: 4, maxWidth: 400, mx: 'auto', mt: 6 }}>
@@ -44,3 +40,5 @@ export const SettingsPage: React.FC = () => {
     </Paper>
   );
 };
+
+export default SettingsPage;
