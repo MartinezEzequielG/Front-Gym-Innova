@@ -17,7 +17,7 @@ interface User {
   role: string;
 }
 
-const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT', 'CLIENTE'];
+const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT', 'CLIENT'];
 
 export const UsersPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -31,7 +31,6 @@ export const UsersPage: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState('CLIENTE');
-  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     api.get<User[]>('/users')
@@ -85,13 +84,11 @@ export const UsersPage: React.FC = () => {
         name: newName,
         email: newEmail,
         role: newRole,
-        password: newPassword,
       });
       setUsers([...users, res.data]);
       setNewName('');
       setNewEmail('');
       setNewRole('CLIENTE');
-      setNewPassword('');
       handleCloseCreate();
     } catch (err) {
       console.error('Error al crear usuario:', err);
@@ -144,15 +141,6 @@ export const UsersPage: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
-            <TextField
-              label="Contraseña"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              fullWidth
-              margin="normal"
-              required
-              type="password"
-            />
             <DialogActions>
               <Button onClick={handleCloseCreate}>Cancelar</Button>
               <Button type="submit" variant="contained" disabled={loading}>
