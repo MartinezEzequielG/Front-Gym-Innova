@@ -1,20 +1,16 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 export const api = axios.create({
   baseURL: 'http://localhost:3000',
   withCredentials: true,
 });
 
-interface MeResponse {
-  ok: boolean;
-  user: User;
-}
-
 interface User {
   id: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENT' | 'STAFF';
+  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENTE' | 'STAFF';
 }
 
 interface AuthContextType {
@@ -37,23 +33,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  const checkSession = async () => {
-    try {
-      const res = await api.get<MeResponse>('/auth/me');
-      if (res.data.ok) {
-        setUser(res.data.user);
-      } else {
+    const checkSession = async () => {
+      try {
+        const res = await api.get<{ ok: boolean; user: User }>('/auth/me');
+        if (res.data.ok) {
+          setUser(res.data.user);
+        } else {
+          setUser(null);
+        }
+      } catch {
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-  checkSession();
-}, []);
-
+    };
+    checkSession();
+  }, []);
 
   const loginWithGoogle = () => {
     window.location.href = 'http://localhost:3000/auth/google/redirect';
@@ -65,8 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <GoogleOAuthProvider clientId="943627888479-bht76vnbfahrjsufkkqheg49vfmcfmch.apps.googleusercontent.com">
+      <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
+        {children}
+      </AuthContext.Provider>
+    </GoogleOAuthProvider>
   );
 };

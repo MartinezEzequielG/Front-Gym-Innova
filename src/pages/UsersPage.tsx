@@ -17,7 +17,7 @@ interface User {
   role: string;
 }
 
-const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT', 'CLIENT'];
+const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT', 'CLIENTE'];
 
 export const UsersPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -31,7 +31,7 @@ export const UsersPage: React.FC = () => {
   const [modalCreateOpen, setModalCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState('CLIENT');
+  const [newRole, setNewRole] = useState('CLIENTE');
   const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
@@ -94,7 +94,9 @@ export const UsersPage: React.FC = () => {
       setNewRole('CLIENT');
       setNewPassword('');
       handleCloseCreate();
-    } catch {}
+    } catch (err) {
+      console.error('Error al crear usuario:', err);
+    }
     setLoading(false);
   };
 
@@ -166,10 +168,10 @@ export const UsersPage: React.FC = () => {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Name</TableCell>
+            <TableCell>Nombre</TableCell>
             <TableCell>Email</TableCell>
             <TableCell>Rol</TableCell>
-            {isAdmin && <TableCell align="center">Actions</TableCell>}
+            {isAdmin && <TableCell align="center">Acciones</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
