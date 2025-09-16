@@ -91,7 +91,7 @@ export const UsersPage: React.FC = () => {
       setUsers([...users, res.data]);
       setNewName('');
       setNewEmail('');
-      setNewRole('CLIENT');
+      setNewRole('CLIENTE');
       setNewPassword('');
       handleCloseCreate();
     } catch (err) {

@@ -1,25 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< HEAD
 import { Button, CircularProgress, Typography, Box, TextField, Fade } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useNavigate } from 'react-router-dom';
 
 const LoginPage: React.FC = () => {
-  const { user, loading, loginWithGoogle, login } = useAuth();
+  const { user, loading, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-=======
-import { api } from '../context/AuthContext';
-import { GoogleLogin } from '@react-oauth/google';
-
-interface LoginResponse {
-  ok: boolean;
-  idToken?: string;
-}
-
-export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
->>>>>>> 6b570926d5a1d3bcd3092ab822c43790d828df92
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -36,18 +23,7 @@ export const LoginPage: React.FC = () => {
     setFormLoading(true);
     setError('');
     try {
-<<<<<<< HEAD
-      await login(email, password);
-=======
-      // Si tu backend soporta login por email/password, ajusta el endpoint y payload
-      const res = await api.post<LoginResponse>('/auth/login', { email, password });
-      if (res.data.ok) {
-        await login(res.data.idToken || '');
-        window.location.href = '/dashboard';
-      } else {
-        setError('Credenciales incorrectas');
-      }
->>>>>>> 6b570926d5a1d3bcd3092ab822c43790d828df92
+      setError('Login con email/contraseña no implementado todavía');
     } catch {
       setError('Credenciales incorrectas');
     } finally {
@@ -55,11 +31,13 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  if (loading) return (
-    <Box minHeight="100vh" display="flex" alignItems="center" justifyContent="center">
-      <CircularProgress />
-    </Box>
-  );
+  if (loading) {
+    return (
+      <Box minHeight="100vh" display="flex" alignItems="center" justifyContent="center">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -124,7 +102,7 @@ export const LoginPage: React.FC = () => {
                 label: { color: '#888' },
               }}
               InputLabelProps={{
-                style: { color: '#888' }
+                style: { color: '#888' },
               }}
             />
             <TextField
@@ -141,7 +119,7 @@ export const LoginPage: React.FC = () => {
                 label: { color: '#888' },
               }}
               InputLabelProps={{
-                style: { color: '#888' }
+                style: { color: '#888' },
               }}
             />
             {error && (
@@ -170,11 +148,11 @@ export const LoginPage: React.FC = () => {
             >
               {formLoading ? 'Ingresando...' : 'Ingresar'}
             </Button>
-<<<<<<< HEAD
             <Button
               fullWidth
               variant="text"
               startIcon={<GoogleIcon />}
+              onClick={loginWithGoogle}
               sx={{
                 color: '#222',
                 fontWeight: 500,
@@ -183,21 +161,10 @@ export const LoginPage: React.FC = () => {
                 textTransform: 'none',
                 letterSpacing: 1,
                 '&:hover': { color: '#1976d2', bgcolor: 'transparent' },
-=======
-
-            <GoogleLogin
-              onSuccess={async (credentialResponse) => {
-                if (credentialResponse.credential) {
-                  await login(credentialResponse.credential);
-                  window.location.href = '/dashboard';
-                }
->>>>>>> 6b570926d5a1d3bcd3092ab822c43790d828df92
               }}
-              onError={() => {
-                setError('Error al iniciar sesión con Google');
-              }}
-              width="100%"
-            />
+            >
+              Ingresar con Google
+            </Button>
           </form>
         </Box>
       </Fade>

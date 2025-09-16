@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import axios from 'axios';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
+// Configuración global de Axios para el backend
 export const api = axios.create({
   baseURL: 'http://localhost:3000',
   withCredentials: true,
@@ -10,7 +11,8 @@ export const api = axios.create({
 interface User {
   id: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENTE' | 'STAFF';
+  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENT' | 'STAFF';
+  // Otros campos según el modelo del backend
 }
 
 interface AuthContextType {
