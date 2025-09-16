@@ -27,7 +27,6 @@ export const UsersPage: React.FC = () => {
   const [editRole, setEditRole] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Estado para crear usuario
   const [modalCreateOpen, setModalCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -116,7 +115,6 @@ export const UsersPage: React.FC = () => {
         </Button>
       )}
 
-      {/* Modal para crear usuario */}
       <Dialog open={modalCreateOpen} onClose={handleCloseCreate} maxWidth="sm" fullWidth>
         <DialogTitle>Nuevo usuario</DialogTitle>
         <DialogContent>
