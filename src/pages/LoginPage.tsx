@@ -1,75 +1,70 @@
-import React, { useState } from 'react';
-import {
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  Box,
-  Fade,
-  CircularProgress,
-} from '@mui/material';
-import GoogleIcon from '@mui/icons-material/Google';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { Button, CircularProgress, Typography, Box, TextField, Fade } from '@mui/material';
+import GoogleIcon from '@mui/icons-material/Google';
+import { useNavigate } from 'react-router-dom';
 
-export const LoginPage: React.FC = () => {
-  const { login, loginWithGoogle } = useAuth();
+const LoginPage: React.FC = () => {
+  const { user, loading, loginWithGoogle, login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Por favor completa todos los campos');
-      return;
-    }
-    setLoading(true);
+    setFormLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:3000/api/v1/auth/login', {
-        email,
-        password,
-      });
-      const token = res.data.token;
-      await login(token);
-      window.location.href = '/dashboard';
+      await login(email, password);
     } catch {
       setError('Credenciales incorrectas');
     } finally {
-      setLoading(false);
+      setFormLoading(false);
     }
   };
 
+  if (loading) return (
+    <Box minHeight="100vh" display="flex" alignItems="center" justifyContent="center">
+      <CircularProgress />
+    </Box>
+  );
+
   return (
     <Box
-      sx={{
-        minHeight: '100vh',
-        width: '100vw',
-        background: '#f5f6fa',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'Montserrat, Oswald, sans-serif',
-      }}
+      minHeight="100vh"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      sx={{ background: '#f4f5f7' }}
     >
-      <Fade in timeout={600}>
-        <Paper
-          elevation={4}
+      <Fade in timeout={400}>
+        <Box
           sx={{
-            p: 4,
+            p: { xs: 2, sm: 4 },
             borderRadius: 3,
-            maxWidth: 360,
+            maxWidth: 340,
             width: '100%',
             bgcolor: '#fff',
-            textAlign: 'center',
+            boxShadow: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            border: '1px solid #ececec',
           }}
         >
           <Typography
-            variant="h4"
+            variant="h5"
+            align="center"
             sx={{
-              fontWeight: 800,
+              fontWeight: 700,
               mb: 1,
               letterSpacing: 1,
               color: '#222',
@@ -78,12 +73,12 @@ export const LoginPage: React.FC = () => {
           >
             Acero Gym
           </Typography>
-
           <Typography
-            variant="subtitle2"
+            variant="body2"
+            align="center"
             sx={{
-              mb: 4,
-              color: '#FFD600',
+              mb: 3,
+              color: '#888',
               fontWeight: 500,
               letterSpacing: 1,
               fontFamily: 'Montserrat, Oswald, sans-serif',
@@ -91,11 +86,9 @@ export const LoginPage: React.FC = () => {
           >
             Innova System Gym
           </Typography>
-
           <form onSubmit={handleSubmit} style={{ width: '100%' }}>
             <TextField
               label="Email"
-              type="email"
               variant="standard"
               fullWidth
               required
@@ -103,8 +96,11 @@ export const LoginPage: React.FC = () => {
               onChange={e => setEmail(e.target.value)}
               sx={{
                 mb: 2,
-                input: { color: '#222' },
-                label: { color: '#555' },
+                input: { color: '#222', fontSize: 16 },
+                label: { color: '#888' },
+              }}
+              InputLabelProps={{
+                style: { color: '#888' }
               }}
             />
             <TextField
@@ -117,56 +113,58 @@ export const LoginPage: React.FC = () => {
               onChange={e => setPassword(e.target.value)}
               sx={{
                 mb: 3,
-                input: { color: '#222' },
-                label: { color: '#555' },
+                input: { color: '#222', fontSize: 16 },
+                label: { color: '#888' },
+              }}
+              InputLabelProps={{
+                style: { color: '#888' }
               }}
             />
-
             {error && (
-              <Typography color="error" sx={{ mb: 2, fontSize: '0.9rem' }}>
+              <Typography color="error" sx={{ mb: 2 }}>
                 {error}
               </Typography>
             )}
-
             <Button
               type="submit"
               fullWidth
               variant="contained"
               sx={{
-                bgcolor: '#FFD600',
-                color: '#222',
-                fontWeight: 700,
+                bgcolor: '#222',
+                color: '#fff',
+                fontWeight: 600,
                 fontSize: '1rem',
-                py: 1.2,
-                mb: 2,
+                py: 1,
+                mb: 1,
                 borderRadius: 2,
+                boxShadow: 'none',
                 textTransform: 'none',
-                '&:hover': { bgcolor: '#FFC400' },
+                letterSpacing: 1,
+                '&:hover': { bgcolor: '#111' },
               }}
-              disabled={loading}
+              disabled={formLoading}
             >
-              {loading ? <CircularProgress size={24} sx={{ color: '#222' }} /> : 'Ingresar'}
+              {formLoading ? 'Ingresando...' : 'Ingresar'}
             </Button>
-
             <Button
               fullWidth
-              variant="outlined"
+              variant="text"
               startIcon={<GoogleIcon />}
               sx={{
-                color: '#555',
-                borderColor: '#ccc',
-                fontWeight: 600,
-                fontSize: '0.95rem',
+                color: '#222',
+                fontWeight: 500,
+                fontSize: '1rem',
                 py: 1,
                 textTransform: 'none',
-                '&:hover': { borderColor: '#FFD600', color: '#222' },
+                letterSpacing: 1,
+                '&:hover': { color: '#1976d2', bgcolor: 'transparent' },
               }}
               onClick={loginWithGoogle}
             >
               Ingresar con Google
             </Button>
           </form>
-        </Paper>
+        </Box>
       </Fade>
     </Box>
   );

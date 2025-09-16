@@ -1,7 +1,16 @@
 import React from 'react';
-import { Drawer, Toolbar, List, ListItem, ListItemText, ListItemButton } from '@mui/material';
+import {
+  Drawer, Toolbar, List, ListItem, ListItemText, ListItemButton, ListItemIcon, Divider, Box
+} from '@mui/material';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import PeopleIcon from '@mui/icons-material/People';
+import GroupIcon from '@mui/icons-material/Group';
+import PaymentIcon from '@mui/icons-material/Payment';
+import SubscriptionsIcon from '@mui/icons-material/Subscriptions';
+import SettingsIcon from '@mui/icons-material/Settings';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const drawerWidth = 240;
 
@@ -10,9 +19,19 @@ interface SidebarProps {
   handleDrawerToggle: () => void;
 }
 
+const navItems = [
+  { label: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+  { label: 'Members', icon: <PeopleIcon />, path: '/members' },
+  { label: 'Users', icon: <GroupIcon />, path: '/users' },
+  { label: 'Payments', icon: <PaymentIcon />, path: '/payments' },
+  { label: 'Subscriptions', icon: <SubscriptionsIcon />, path: '/subscriptions' },
+  { label: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+];
+
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -20,31 +39,65 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
   };
 
   const drawerContent = (
-    <div>
+    <Box
+      sx={{
+        height: '100%',
+        bgcolor: 'primary.main',
+        color: 'primary.contrastText',
+        display: 'flex',
+        flexDirection: 'column',
+        p: 0,
+      }}
+    >
       <Toolbar />
+      <List sx={{ flexGrow: 1 }}>
+        {navItems.map(item => (
+          <ListItem
+            key={item.label}
+            disablePadding
+            sx={{
+              bgcolor: location.pathname === item.path ? 'primary.dark' : 'inherit',
+              '&:hover': { bgcolor: 'primary.light' },
+              transition: 'background 0.2s',
+            }}
+          >
+            <ListItemButton
+              onClick={() => handleNavigate(item.path)}
+              sx={{
+                color: 'inherit',
+                py: 1.5,
+                px: 3,
+              }}
+              selected={location.pathname === item.path}
+            >
+              <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+      <Divider sx={{ bgcolor: 'primary.light', my: 1 }} />
       <List>
         <ListItem disablePadding>
-          <ListItemButton onClick={() => handleNavigate('/dashboard')}>
-            <ListItemText primary="Dashboard" />
-          </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton onClick={() => handleNavigate('/users')}>
-            <ListItemText primary="Users" />
-          </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton onClick={() => handleNavigate('/settings')}>
-            <ListItemText primary="Settings" />
-          </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton onClick={logout}>
+          <ListItemButton
+            onClick={logout}
+            sx={{
+              color: 'inherit',
+              py: 1.5,
+              px: 3,
+              '&:hover': { bgcolor: 'error.main', color: 'common.white' },
+            }}
+          >
+            <ListItemIcon sx={{ color: 'inherit', minWidth: 36 }}>
+              <LogoutIcon />
+            </ListItemIcon>
             <ListItemText primary="Logout" />
           </ListItemButton>
         </ListItem>
       </List>
-    </div>
+    </Box>
   );
 
   return (
@@ -54,7 +107,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
         sx={{
           width: drawerWidth,
           flexShrink: 0,
-          [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box' },
+          [`& .MuiDrawer-paper`]: {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+          },
           display: { xs: 'none', md: 'block' },
         }}
       >
@@ -67,7 +125,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', md: 'none' },
-          [`& .MuiDrawer-paper`]: { width: drawerWidth },
+          [`& .MuiDrawer-paper`]: {
+            width: drawerWidth,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+          },
         }}
       >
         {drawerContent}

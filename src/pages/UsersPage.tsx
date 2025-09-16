@@ -1,40 +1,44 @@
 import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
-  IconButton, Select, MenuItem, TextField, Button, Box
+  IconButton, Select, MenuItem, TextField, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
-import axios from 'axios';
+import AddIcon from '@mui/icons-material/Add';
+import { api } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
 }
 
-const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT'];
+const roles = ['ADMIN', 'MANAGER', 'EMPLOYEE', 'ACCOUNTANT', 'CLIENT'];
 
 export const UsersPage: React.FC = () => {
-  const { token, user: currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Estado para crear usuario
+  const [modalCreateOpen, setModalCreateOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState('CLIENT');
+  const [newPassword, setNewPassword] = useState('');
+
   useEffect(() => {
-    if (token) {
-      axios.get<User[]>('http://localhost:3000/api/v1/users', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+    api.get<User[]>('/users')
       .then(res => setUsers(res.data))
       .catch(() => setUsers([]));
-    }
-  }, [token]);
+  }, []);
 
   const handleEdit = (user: User) => {
     setEditId(user.id);
@@ -42,41 +46,123 @@ export const UsersPage: React.FC = () => {
     setEditRole(user.role);
   };
 
-  const handleSave = async (id: number) => {
+  const handleSave = async (id: string) => {
     setLoading(true);
     try {
-      await axios.patch(`http://localhost:3000/api/v1/users/${id}`, { name: editName }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      await axios.patch(`http://localhost:3000/api/v1/users/${id}/role`, { role: editRole }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.patch(`/users/${id}`, { name: editName });
+      await api.patch(`/users/${id}/role`, { role: editRole });
       setUsers(users.map(u =>
         u.id === id ? { ...u, name: editName, role: editRole } : u
       ));
       setEditId(null);
-    } catch {}
+    } catch (err) {
+      console.error('Error al editar usuario:', err);
+    }
     setLoading(false);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      await axios.delete(`http://localhost:3000/api/v1/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/users/${id}`);
       setUsers(users.filter(u => u.id !== id));
-    } catch {}
+    } catch (err) {
+      console.error('Error al eliminar usuario:', err);
+    }
     setLoading(false);
   };
 
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  // Crear usuario
+  const handleOpenCreate = () => setModalCreateOpen(true);
+  const handleCloseCreate = () => setModalCreateOpen(false);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await api.post<User>('/users', {
+        name: newName,
+        email: newEmail,
+        role: newRole,
+        password: newPassword,
+      });
+      setUsers([...users, res.data]);
+      setNewName('');
+      setNewEmail('');
+      setNewRole('CLIENT');
+      setNewPassword('');
+      handleCloseCreate();
+    } catch {}
+    setLoading(false);
+  };
 
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
         Usuarios registrados
       </Typography>
+      {isAdmin && (
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          sx={{ mb: 2 }}
+          onClick={handleOpenCreate}
+        >
+          Crear usuario
+        </Button>
+      )}
+
+      {/* Modal para crear usuario */}
+      <Dialog open={modalCreateOpen} onClose={handleCloseCreate} maxWidth="sm" fullWidth>
+        <DialogTitle>Nuevo usuario</DialogTitle>
+        <DialogContent>
+          <form onSubmit={handleCreate}>
+            <TextField
+              label="Nombre"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              fullWidth
+              margin="normal"
+              required
+            />
+            <TextField
+              label="Email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              fullWidth
+              margin="normal"
+              required
+              type="email"
+            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Rol</InputLabel>
+              <Select value={newRole} onChange={e => setNewRole(e.target.value)} required>
+                {roles.map(role => (
+                  <MenuItem key={role} value={role}>{role}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Contraseña"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              fullWidth
+              margin="normal"
+              required
+              type="password"
+            />
+            <DialogActions>
+              <Button onClick={handleCloseCreate}>Cancelar</Button>
+              <Button type="submit" variant="contained" disabled={loading}>
+                Crear usuario
+              </Button>
+            </DialogActions>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Table>
         <TableHead>
           <TableRow>

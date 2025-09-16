@@ -1,74 +1,71 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 
+export const api = axios.create({
+  baseURL: 'http://localhost:3000',
+  withCredentials: true,
+});
+
+interface MeResponse {
+  ok: boolean;
+  user: User;
+}
+
 interface User {
-  id: number;
+  id: string;
   email: string;
-  name: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT';
+  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENT' | 'STAFF';
 }
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (token: string) => Promise<void>;
+  loading: boolean;
   loginWithGoogle: () => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  token: null,
-  login: async () => {},
-  loginWithGoogle: () => {},
-  logout: () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      axios.get<User>('http://localhost:3000/api/v1/users/me', {
-        headers: { Authorization: `Bearer ${storedToken}` }
-      })
-      .then(res => setUser(res.data))
-      .catch(() => setUser(null));
-    }
-  }, []);
-
-  const login = async (newToken: string) => {
-    setToken(newToken);
-    localStorage.setItem('token', newToken);
+  const checkSession = async () => {
     try {
-      const res = await axios.get<User>('http://localhost:3000/api/v1/users/me', {
-        headers: { Authorization: `Bearer ${newToken}` }
-      });
-      setUser(res.data);
+      const res = await api.get<MeResponse>('/auth/me');
+      if (res.data.ok) {
+        setUser(res.data.user);
+      } else {
+        setUser(null);
+      }
     } catch {
       setUser(null);
+    } finally {
+      setLoading(false);
     }
   };
+  checkSession();
+}, []);
+
 
   const loginWithGoogle = () => {
-    window.location.href = 'http://localhost:3000/api/v1/auth/google';
+    window.location.href = 'http://localhost:3000/auth/google/redirect';
   };
 
   const logout = async () => {
-    await axios.get('http://localhost:3000/api/v1/auth/logout', { withCredentials: true });
+    await api.post('/auth/logout');
     setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );

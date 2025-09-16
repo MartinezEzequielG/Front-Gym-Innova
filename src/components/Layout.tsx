@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, CssBaseline, Toolbar } from '@mui/material';
 import { Header } from './Header';
-import { Sidebar } from './Sidebar';
+import { Sidebar } from '../components/Sidebar';
 import { Footer } from './Footer';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {

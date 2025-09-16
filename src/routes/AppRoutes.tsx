@@ -7,6 +7,9 @@ import DashboardPage from '../pages/Dashboard';
 import { UsersPage } from '../pages/UsersPage';
 import { Layout } from '../components/Layout';
 import { SettingsPage } from '../pages/SettingsPage';
+import MembersPage from '../pages/MembersPage';
+import PaymentsPage from '../pages/PaymentsPage';
+import SubscriptionsPage from '../pages/SubscriptionsPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -34,6 +37,14 @@ export const AppRoutes = () => (
       }
     />
     <Route
+      path="/members"
+      element={
+        <PrivateRoute>
+          <MembersPage />
+        </PrivateRoute>
+      }
+    />
+    <Route
       path="/users"
       element={
         <PrivateRoute>
@@ -46,6 +57,22 @@ export const AppRoutes = () => (
       element={
         <PrivateRoute>
           <SettingsPage />
+        </PrivateRoute>
+      }
+    />
+    <Route
+      path="/payments"
+      element={
+        <PrivateRoute>
+          <PaymentsPage />
+        </PrivateRoute>
+      }
+    />
+    <Route
+      path="/subscriptions"
+      element={
+        <PrivateRoute>
+          <SubscriptionsPage />
         </PrivateRoute>
       }
     />
