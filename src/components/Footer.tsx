@@ -1,14 +1,16 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 
+const drawerWidth = 240;
+
 export const Footer: React.FC = () => (
   <Box
     component="footer"
     sx={{
-      width: '100%',
       position: 'fixed',
       bottom: 0,
-      left: 0,
+      left: { xs: 0, md: `${drawerWidth}px` },
+      width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
       bgcolor: 'grey.200',
       py: 2,
       textAlign: 'center',

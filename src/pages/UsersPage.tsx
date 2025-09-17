@@ -64,15 +64,20 @@ export const UsersPage: React.FC = () => {
     try {
       await api.delete(`/users/${id}`);
       setUsers(users.filter(u => u.id !== id));
-    } catch (err) {
-      console.error('Error al eliminar usuario:', err);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        alert('El usuario ya no existe.');
+        setUsers(users.filter(u => u.id !== id));
+      } else {
+        console.error('Error al eliminar usuario:', err);
+        alert('Error al eliminar usuario.');
+      }
     }
     setLoading(false);
   };
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  // Crear usuario
   const handleOpenCreate = () => setModalCreateOpen(true);
   const handleCloseCreate = () => setModalCreateOpen(false);
 
