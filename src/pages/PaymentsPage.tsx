@@ -9,15 +9,22 @@ interface Payment {
   userId: string;
   user: { id: string; name: string; email: string };
   provider: string;
+  method: string;
+  type?: string;
+  notes?: string;
+  receiptUrl?: string;
   providerPaymentId?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REFUNDED';
   amount: number;
   currency?: string;
   createdAt: string;
+  subscriptionId?: string;
 }
 
 const paymentStatus = ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED'];
 const paymentProviders = ['mercado_pago', 'manual', 'otro'];
+const paymentMethods = ['CASH', 'CARD', 'TRANSFER', 'MP'];
+const paymentTypes = ['SUBSCRIPTION', 'CLASS', 'ENROLLMENT'];
 
 const PaymentsPage: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -28,11 +35,15 @@ const PaymentsPage: React.FC = () => {
   const [form, setForm] = useState({
     userId: '',
     provider: '',
+    method: '',
+    type: '',
     amount: '',
     currency: 'ARS',
     status: 'PENDING',
     subscriptionId: '',
     providerPaymentId: '',
+    notes: '',
+    receiptUrl: '',
   });
 
   useEffect(() => {
@@ -61,16 +72,24 @@ const PaymentsPage: React.FC = () => {
         providerPaymentId: form.providerPaymentId || undefined,
         currency: form.currency || undefined,
         status: form.status || undefined,
+        method: form.method || undefined,
+        type: form.type || undefined,
+        notes: form.notes || undefined,
+        receiptUrl: form.receiptUrl || undefined,
       });
       setOpen(false);
       setForm({
         userId: '',
         provider: '',
+        method: '',
+        type: '',
         amount: '',
         currency: 'ARS',
         status: 'PENDING',
         subscriptionId: '',
         providerPaymentId: '',
+        notes: '',
+        receiptUrl: '',
       });
       fetchPayments();
     } catch (err) {
@@ -109,8 +128,12 @@ const PaymentsPage: React.FC = () => {
               <TableCell>Usuario</TableCell>
               <TableCell>Email</TableCell>
               <TableCell>Proveedor</TableCell>
+              <TableCell>Método</TableCell>
+              <TableCell>Tipo</TableCell>
               <TableCell>Monto</TableCell>
               <TableCell>Estado</TableCell>
+              <TableCell>Notas</TableCell>
+              <TableCell>Comprobante</TableCell>
               <TableCell>Fecha</TableCell>
             </TableRow>
           </TableHead>
@@ -120,11 +143,19 @@ const PaymentsPage: React.FC = () => {
                 <TableCell>{payment.user?.name || payment.userId}</TableCell>
                 <TableCell>{payment.user?.email || '-'}</TableCell>
                 <TableCell>{payment.provider}</TableCell>
+                <TableCell>{payment.method}</TableCell>
+                <TableCell>{payment.type}</TableCell>
                 <TableCell>
                   {payment.amount} {payment.currency}
                 </TableCell>
                 <TableCell>
                   <Chip label={payment.status} color={statusColor(payment.status)} size="small" />
+                </TableCell>
+                <TableCell>{payment.notes}</TableCell>
+                <TableCell>
+                  {payment.receiptUrl ? (
+                    <a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">Ver</a>
+                  ) : '-'}
                 </TableCell>
                 <TableCell>
                   {new Date(payment.createdAt).toLocaleString()}
@@ -157,6 +188,29 @@ const PaymentsPage: React.FC = () => {
             >
               {paymentProviders.map(p => (
                 <MenuItem key={p} value={p}>{p}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Método de pago"
+              name="method"
+              value={form.method}
+              onChange={handleChange}
+              select
+              required
+            >
+              {paymentMethods.map(m => (
+                <MenuItem key={m} value={m}>{m}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Tipo de pago"
+              name="type"
+              value={form.type}
+              onChange={handleChange}
+              select
+            >
+              {paymentTypes.map(t => (
+                <MenuItem key={t} value={t}>{t}</MenuItem>
               ))}
             </TextField>
             <TextField
@@ -194,6 +248,18 @@ const PaymentsPage: React.FC = () => {
               label="ID de Pago del Proveedor"
               name="providerPaymentId"
               value={form.providerPaymentId}
+              onChange={handleChange}
+            />
+            <TextField
+              label="Notas"
+              name="notes"
+              value={form.notes}
+              onChange={handleChange}
+            />
+            <TextField
+              label="Comprobante (URL)"
+              name="receiptUrl"
+              value={form.receiptUrl}
               onChange={handleChange}
             />
           </DialogContent>

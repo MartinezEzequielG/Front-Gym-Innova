@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
   IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Button,
-  FormControl, InputLabel, Select, MenuItem, Checkbox, FormControlLabel
+  FormControl, InputLabel, Select, MenuItem, Checkbox, FormControlLabel, Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { api } from '../context/AuthContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,6 +18,8 @@ interface Subscription {
   plan: { id: string; name: string };
   startDate: string;
   endDate: string;
+  status?: string;
+  autoRenew?: boolean;
 }
 
 interface User { id: string; name: string; email: string; }
@@ -101,6 +104,7 @@ export const SubscriptionsPage: React.FC = () => {
       ));
       setEditId(null);
       setModalEditOpen(false);
+      fetchSubs();
     } catch {}
     setLoading(false);
   };
@@ -118,7 +122,20 @@ export const SubscriptionsPage: React.FC = () => {
       setSubs(subs.filter(s => s.id !== deleteId));
       setDeleteId(null);
       setModalDeleteOpen(false);
+      fetchSubs();
     } catch {}
+    setLoading(false);
+  };
+
+  // Renovar suscripción
+  const handleRenew = async (id: string) => {
+    setLoading(true);
+    try {
+      await api.patch(`/subscriptions/${id}/renew`);
+      fetchSubs();
+    } catch {
+      alert('Error al renovar la suscripción');
+    }
     setLoading(false);
   };
 
@@ -197,6 +214,8 @@ export const SubscriptionsPage: React.FC = () => {
             <TableCell>Plan</TableCell>
             <TableCell>Inicio</TableCell>
             <TableCell>Fin</TableCell>
+            <TableCell>Estado</TableCell>
+            <TableCell>Renovación</TableCell>
             <TableCell align="center">Acciones</TableCell>
           </TableRow>
         </TableHead>
@@ -207,12 +226,25 @@ export const SubscriptionsPage: React.FC = () => {
               <TableCell>{sub.plan?.name}</TableCell>
               <TableCell>{sub.startDate.slice(0, 10)}</TableCell>
               <TableCell>{sub.endDate.slice(0, 10)}</TableCell>
+              <TableCell>
+                <Chip label={sub.status || 'VIGENTE'} color={sub.status === 'VENCIDA' ? 'error' : 'success'} size="small" />
+              </TableCell>
+              <TableCell>
+                <Chip label={sub.autoRenew ? 'Sí' : 'No'} color={sub.autoRenew ? 'primary' : 'default'} size="small" />
+              </TableCell>
               <TableCell align="center">
                 <IconButton onClick={() => handleEdit(sub)}>
                   <EditIcon />
                 </IconButton>
                 <IconButton onClick={() => handleOpenDelete(sub.id)} disabled={loading}>
                   <DeleteIcon color="error" />
+                </IconButton>
+                <IconButton
+                  onClick={() => handleRenew(sub.id)}
+                  disabled={loading || sub.status !== 'VENCIDA'}
+                  title="Renovar suscripción"
+                >
+                  <AutorenewIcon color={sub.status === 'VENCIDA' ? 'primary' : 'disabled'} />
                 </IconButton>
               </TableCell>
             </TableRow>
