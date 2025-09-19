@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  CircularProgress, Alert, Stack
+  CircularProgress, Alert, Stack, Chip
 } from '@mui/material';
 import MenuItem from '@mui/material/MenuItem';
 import { api } from '../context/AuthContext';
@@ -20,6 +20,7 @@ interface Client {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
+  subscriptionStatus?: string; // <-- nuevo campo
 }
 
 const statusOptions = ['activo', 'inactivo'];
@@ -140,6 +141,7 @@ const MembersPage: React.FC = () => {
             <TableCell>Fecha de nacimiento</TableCell>
             <TableCell>Dirección</TableCell>
             <TableCell>Estado</TableCell>
+            <TableCell>Subscripción</TableCell> {/* NUEVO */}
             <TableCell>Notas</TableCell>
             <TableCell>Acciones</TableCell>
           </TableRow>
@@ -154,6 +156,25 @@ const MembersPage: React.FC = () => {
               <TableCell>{client.birthDate ? new Date(client.birthDate).toLocaleDateString() : '-'}</TableCell>
               <TableCell>{client.address || '-'}</TableCell>
               <TableCell>{client.status || '-'}</TableCell>
+              <TableCell>
+                {client.subscriptionStatus ? (
+                  <Chip
+                    label={client.subscriptionStatus}
+                    color={
+                      client.subscriptionStatus === 'VIGENTE'
+                        ? 'success'
+                        : client.subscriptionStatus === 'PENDIENTE_PAGO'
+                        ? 'warning'
+                        : client.subscriptionStatus === 'VENCIDA'
+                        ? 'error'
+                        : 'default'
+                    }
+                    size="small"
+                  />
+                ) : (
+                  '-'
+                )}
+              </TableCell>
               <TableCell>{client.notes || '-'}</TableCell>
               <TableCell>
                 <Button color="error" size="small" onClick={() => handleDelete(client.id)}>

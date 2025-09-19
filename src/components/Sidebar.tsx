@@ -12,6 +12,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'; // Puedes usar otro icono si prefieres
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -30,6 +31,7 @@ const navItems = [
   { label: 'Subscriptions', icon: <SubscriptionsIcon />, path: '/subscriptions' },
   { label: 'Plans', icon: <FitnessCenterIcon />, path: '/plans' },
   { label: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+  { label: 'Recepción', icon: <MeetingRoomIcon />, path: '/reception' }, // <-- NUEVO
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle }) => {
