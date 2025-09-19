@@ -89,9 +89,7 @@ export const AppRoutes = () => (
     <Route
       path="/reception"
       element={
-        <PrivateRoute>
           <ReceptionPage />
-        </PrivateRoute>
       }
     />
   </Routes>

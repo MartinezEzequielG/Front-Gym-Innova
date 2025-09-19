@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Drawer, Toolbar, List, ListItem, ListItemText, ListItemButton,
-  ListItemIcon, Divider, Box, IconButton
+  ListItemIcon, Divider, Box, IconButton, Collapse
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
@@ -12,7 +12,9 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
-import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'; // Puedes usar otro icono si prefieres
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -31,7 +33,6 @@ const navItems = [
   { label: 'Subscriptions', icon: <SubscriptionsIcon />, path: '/subscriptions' },
   { label: 'Plans', icon: <FitnessCenterIcon />, path: '/plans' },
   { label: 'Settings', icon: <SettingsIcon />, path: '/settings' },
-  { label: 'Recepción', icon: <MeetingRoomIcon />, path: '/reception' }, // <-- NUEVO
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle }) => {
@@ -39,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
   const navigate = useNavigate();
   const location = useLocation();
   const [hidden, setHidden] = useState(false);
+  const [receptionOpen, setReceptionOpen] = useState(false);
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -68,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
           onClick={() => setHidden(true)}
           sx={{ color: 'primary.contrastText' }}
         >
-          <MenuIcon /> {/* botón para ocultar el sidebar */}
+          <MenuIcon />
         </IconButton>
       </Toolbar>
       <List sx={{ flexGrow: 1 }}>
@@ -98,6 +100,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
             </ListItemButton>
           </ListItem>
         ))}
+
+        <ListItem disablePadding>
+          <ListItemButton
+            onClick={() => setReceptionOpen(!receptionOpen)}
+            sx={{
+              color: 'inherit',
+              py: 1.5,
+              px: 3,
+            }}
+          >
+            <ListItemIcon sx={{ color: 'inherit', minWidth: 0, justifyContent: 'center' }}>
+              <MeetingRoomIcon />
+            </ListItemIcon>
+            <ListItemText primary="Recepción" />
+            {receptionOpen ? <ExpandLess /> : <ExpandMore />}
+          </ListItemButton>
+        </ListItem>
+        <Collapse in={receptionOpen} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            <ListItem disablePadding>
+              <ListItemButton
+                sx={{ pl: 6, color: 'inherit' }}
+                onClick={e => {
+                  e.stopPropagation();
+                  window.open('/reception', '_blank');
+                }}
+              >
+                <ListItemText primary="Abrir pestaña Recepción" />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </Collapse>
       </List>
       <Divider sx={{ bgcolor: 'primary.light', my: 1 }} />
       <List>
@@ -160,66 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
           },
         }}
       >
-        <Box
-          sx={{
-            height: '100%',
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            display: 'flex',
-            flexDirection: 'column',
-            p: 0,
-            width: drawerWidth,
-          }}
-        >
-          <Toolbar />
-          <List sx={{ flexGrow: 1 }}>
-            {navItems.map(item => (
-              <ListItem
-                key={item.label}
-                disablePadding
-                sx={{
-                  bgcolor: location.pathname === item.path ? 'primary.dark' : 'inherit',
-                  '&:hover': { bgcolor: 'primary.light' },
-                  transition: 'background 0.2s',
-                }}
-              >
-                <ListItemButton
-                  onClick={() => handleNavigate(item.path)}
-                  sx={{
-                    color: 'inherit',
-                    py: 1.5,
-                    px: 3,
-                  }}
-                  selected={location.pathname === item.path}
-                >
-                  <ListItemIcon sx={{ color: 'inherit', minWidth: 0, justifyContent: 'center' }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-          <Divider sx={{ bgcolor: 'primary.light', my: 1 }} />
-          <List>
-            <ListItem disablePadding>
-              <ListItemButton
-                onClick={logout}
-                sx={{
-                  color: 'inherit',
-                  py: 1.5,
-                  px: 3,
-                  '&:hover': { bgcolor: 'error.main', color: 'common.white' },
-                }}
-              >
-                <ListItemIcon sx={{ color: 'inherit', minWidth: 0, justifyContent: 'center' }}>
-                  <LogoutIcon />
-                </ListItemIcon>
-                <ListItemText primary="Logout" />
-              </ListItemButton>
-            </ListItem>
-          </List>
-        </Box>
+        {drawerContent}
       </Drawer>
 
       {hidden && (
