@@ -5,108 +5,99 @@ import {
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Stack
 } from '@mui/material';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
+import MenuItem from '@mui/material/MenuItem';
+import { api } from '../context/AuthContext';
 
-interface Member {
-  id: number;
-  fullName: string;
+interface Client {
+  id: string;
+  name: string;
+  email: string;
   dni: string;
-  birthDate: string;
-  phone: string;
-  expirationDate: string;
-  branch: string;
+  phone?: string;
+  birthDate?: string;
+  address?: string;
+  status?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export const MembersPage: React.FC = () => {
-  const { token, user } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
+const statusOptions = ['activo', 'inactivo'];
+
+const MembersPage: React.FC = () => {
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    fullName: '',
-    dni: '',
-    birthDate: '',
-    phone: '',
+    name: '',
     email: '',
-    paymentMethod: '',
-    monthlyPlan: '',
-    branch: '',
-    expirationDate: '',
+    dni: '',
+    phone: '',
+    birthDate: '',
+    address: '',
+    status: '',
+    notes: '',
   });
 
-  // Cargar miembros
-  const loadMembers = async () => {
-    if (!token) return;
+  // Cargar clientes
+  const loadClients = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.get<Member[]>('http://localhost:3000/api/v1/members/list', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      console.log('Miembros desde el back:', res.data);
-      setMembers(res.data);
+      const res = await api.get<Client[]>('/clients');
+      setClients(res.data);
     } catch (err) {
-      setError('Error cargando miembros.');
+      setError('Error cargando clientes.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadMembers();
-  }, [token]);
+    loadClients();
+  }, []);
 
-  // Estado de suscripción
-  const getSubscriptionStatus = (expirationDate: string) => {
-    const today = new Date();
-    const expDate = new Date(expirationDate);
-    return expDate >= today ? 'active' : 'expired';
-  };
-
-  // Crear miembro
+  // Crear cliente
   const handleSubmit = async () => {
-    if (!token) {
-      setError('Usuario no autenticado.');
-      return;
-    }
     setSaving(true);
     setError('');
-
     try {
-      console.log("Token frontend:", token);
-      console.log("User frontend:", user);
-      const res = await axios.post<Member>(
-        'http://localhost:3000/api/v1/members',
-        {
-          ...form,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setMembers([res.data, ...members]);
+      // Validación simple de DNI único en frontend (opcional, el backend debe validar igual)
+      if (clients.some(c => c.dni === form.dni)) {
+        setError('Ya existe un cliente con ese DNI.');
+        setSaving(false);
+        return;
+      }
+      // Convertir birthDate a ISO si existe
+      const payload = {
+        ...form,
+        birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
+      };
+      const res = await api.post<Client>('/clients', payload);
+      setClients([res.data, ...clients]);
       handleClose();
-    } catch (err) {
-      console.error(err);
-      setError('Error al crear el miembro.');
+    } catch (err: any) {
+      if (err?.response?.data?.message?.includes('dni')) {
+        setError('Ya existe un cliente con ese DNI.');
+      } else {
+        setError('Error al crear el cliente.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  // Eliminar miembro
-  const handleDelete = async (id: number) => {
-    if (!token) return;
+  // Eliminar cliente
+  const handleDelete = async (id: string) => {
     setError('');
     try {
-      await axios.delete(`http://localhost:3000/api/v1/members/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setMembers(members.filter(m => m.id !== id));
+      await api.delete(`/clients/${id}`);
+      setClients(clients.filter(c => c.id !== id));
     } catch {
-      setError('Error al eliminar miembro.');
+      setError('Error al eliminar cliente.');
     }
   };
 
@@ -114,102 +105,136 @@ export const MembersPage: React.FC = () => {
   const handleClose = () => {
     setOpen(false);
     setForm({
-      fullName: '',
-      dni: '',
-      birthDate: '',
-      phone: '',
+      name: '',
       email: '',
-      paymentMethod: '',
-      monthlyPlan: '',
-      branch: '',
-      expirationDate: '',
+      dni: '',
+      phone: '',
+      birthDate: '',
+      address: '',
+      status: '',
+      notes: '',
     });
+    setError('');
   };
 
   if (loading) return <CircularProgress />;
-  if (error) return <Alert severity="error">{error}</Alert>;
+  if (error && !open) return <Alert severity="error">{error}</Alert>;
 
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
-        Miembros del gimnasio
+        Clientes del gimnasio
       </Typography>
 
       <Button variant="contained" onClick={handleOpen} sx={{ mb: 2 }}>
-        Crear miembro
+        Crear cliente
       </Button>
 
       <Table>
         <TableHead>
           <TableRow>
             <TableCell>Nombre</TableCell>
+            <TableCell>Email</TableCell>
             <TableCell>DNI</TableCell>
-            <TableCell>Fecha de cumpleaños</TableCell>
             <TableCell>Teléfono</TableCell>
-            <TableCell>Sucursal</TableCell>
-            <TableCell>Vencimiento</TableCell>
+            <TableCell>Fecha de nacimiento</TableCell>
+            <TableCell>Dirección</TableCell>
             <TableCell>Estado</TableCell>
+            <TableCell>Notas</TableCell>
             <TableCell>Acciones</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {members.map(member => {
-            const status = getSubscriptionStatus(member.expirationDate);
-            return (
-              <TableRow key={member.id}>
-                <TableCell>{member.fullName}</TableCell>
-                <TableCell>{member.dni}</TableCell>
-                <TableCell>{new Date(member.birthDate).toLocaleDateString()}</TableCell>
-                <TableCell>{member.phone}</TableCell>
-                <TableCell>{member.branch}</TableCell>
-                <TableCell>{new Date(member.expirationDate).toLocaleDateString()}</TableCell>
-                <TableCell
-                  style={{
-                    backgroundColor: status === 'active' ? '#d0f0c0' : '#f8d7da',
-                    color: status === 'active' ? 'green' : 'red',
-                    fontWeight: 'bold',
-                    textAlign: 'center'
-                  }}
-                >
-                  {status === 'active' ? 'Vigente' : 'Vencido'}
-                </TableCell>
-                <TableCell>
-                  <Button color="error" size="small" onClick={() => handleDelete(member.id)}>
-                    Eliminar
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
+          {clients.map(client => (
+            <TableRow key={client.id}>
+              <TableCell>{client.name}</TableCell>
+              <TableCell>{client.email}</TableCell>
+              <TableCell>{client.dni}</TableCell>
+              <TableCell>{client.phone || '-'}</TableCell>
+              <TableCell>{client.birthDate ? new Date(client.birthDate).toLocaleDateString() : '-'}</TableCell>
+              <TableCell>{client.address || '-'}</TableCell>
+              <TableCell>{client.status || '-'}</TableCell>
+              <TableCell>{client.notes || '-'}</TableCell>
+              <TableCell>
+                <Button color="error" size="small" onClick={() => handleDelete(client.id)}>
+                  Eliminar
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
 
-      {/* Diálogo crear miembro */}
+      {/* Diálogo crear cliente */}
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-        <DialogTitle>Crear nuevo miembro</DialogTitle>
+        <DialogTitle>Crear nuevo cliente</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
-            {[
-              { name: 'fullName', label: 'Nombre completo' },
-              { name: 'dni', label: 'DNI' },
-              { name: 'birthDate', label: 'Fecha de nacimiento', type: 'date' },
-              { name: 'phone', label: 'Teléfono' },
-              { name: 'email', label: 'Email', type: 'email' },
-              { name: 'paymentMethod', label: 'Método de pago' },
-              { name: 'monthlyPlan', label: 'Plan mensual' },
-              { name: 'branch', label: 'Sucursal' },
-              { name: 'expirationDate', label: 'Fecha de vencimiento', type: 'date' },
-            ].map(field => (
-              <TextField
-                key={field.name}
-                fullWidth
-                type={field.type || 'text'}
-                label={field.label}
-                value={(form as any)[field.name]}
-                onChange={e => setForm(f => ({ ...f, [field.name]: e.target.value }))}
-                InputLabelProps={field.type === 'date' ? { shrink: true } : undefined}
-              />
-            ))}
+            <TextField
+              label="Nombre completo"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              required
+              fullWidth
+            />
+            <TextField
+              label="DNI"
+              value={form.dni}
+              onChange={e => setForm(f => ({ ...f, dni: e.target.value }))}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Teléfono"
+              value={form.phone}
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="Fecha de nacimiento"
+              type="date"
+              value={form.birthDate}
+              onChange={e => setForm(f => ({ ...f, birthDate: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Dirección"
+              value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="Estado"
+              value={form.status}
+              onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+              fullWidth
+              select
+              required
+            >
+              {statusOptions.map(option => (
+                <MenuItem key={option} value={option}>
+                  {option.charAt(0).toUpperCase() + option.slice(1)}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Notas"
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+            {error && <Alert severity="error">{error}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>

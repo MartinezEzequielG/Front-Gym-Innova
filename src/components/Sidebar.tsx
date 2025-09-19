@@ -11,6 +11,7 @@ import SubscriptionsIcon from '@mui/icons-material/Subscriptions';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -27,6 +28,7 @@ const navItems = [
   { label: 'Users', icon: <GroupIcon />, path: '/users' },
   { label: 'Payments', icon: <PaymentIcon />, path: '/payments' },
   { label: 'Subscriptions', icon: <SubscriptionsIcon />, path: '/subscriptions' },
+  { label: 'Plans', icon: <FitnessCenterIcon />, path: '/plans' },
   { label: 'Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
 

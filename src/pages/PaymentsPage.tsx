@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem
+  Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Autocomplete, Box
 } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import { api } from '../context/AuthContext';
 
 interface Payment {
   id: string;
-  userId: string;
-  user: { id: string; name: string; email: string };
+  clientId: string;
+  client?: { id: string; name: string; email: string; dni?: string };
   provider: string;
   method: string;
   type?: string;
   notes?: string;
   receiptUrl?: string;
-  providerPaymentId?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REFUNDED';
   amount: number;
   currency?: string;
@@ -21,10 +21,24 @@ interface Payment {
   subscriptionId?: string;
 }
 
+interface ClientOption {
+  id: string;
+  name: string;
+  email: string;
+  dni?: string;
+}
+
+interface Subscription {
+  id: string;
+  plan: { id: string; name: string; price: number };
+  startDate: string;
+  endDate: string;
+  status?: string;
+}
+
 const paymentStatus = ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED'];
 const paymentProviders = ['mercado_pago', 'manual', 'otro'];
 const paymentMethods = ['CASH', 'CARD', 'TRANSFER', 'MP'];
-const paymentTypes = ['SUBSCRIPTION', 'CLASS', 'ENROLLMENT'];
 
 const PaymentsPage: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -33,27 +47,64 @@ const PaymentsPage: React.FC = () => {
 
   // Form state
   const [form, setForm] = useState({
-    userId: '',
+    clientId: '',
     provider: '',
     method: '',
-    type: '',
     amount: '',
     currency: 'ARS',
     status: 'PENDING',
     subscriptionId: '',
-    providerPaymentId: '',
     notes: '',
     receiptUrl: '',
   });
 
+  // Autocomplete clients
+  const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientLoading, setClientLoading] = useState(false);
+
+  // Modal para crear cliente
+  const [openCreateClient, setOpenCreateClient] = useState(false);
+  const [newClient, setNewClient] = useState({
+    name: '',
+    email: '',
+    dni: '',
+  });
+  const [creatingClient, setCreatingClient] = useState(false);
+
+  // Filtros
+  const [filters, setFilters] = useState({
+    name: '',
+    email: '',
+    status: '',
+    from: '',
+    to: '',
+  });
+
+  // Para el filtro de cliente en la tabla
+  const [filterClientOptions, setFilterClientOptions] = useState<ClientOption[]>([]);
+  const [filterClientLoading, setFilterClientLoading] = useState(false);
+
+  // Suscripción vigente
+  const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState('');
+
   useEffect(() => {
     fetchPayments();
-  }, []);
+    // eslint-disable-next-line
+  }, [filters]);
 
   const fetchPayments = async () => {
     setLoading(true);
     try {
-      const res = await api.get<Payment[]>('/payments');
+      const params: any = {};
+      if (filters.email) params.email = filters.email;
+      if (filters.name) params.name = filters.name;
+      if (filters.status) params.status = filters.status;
+      if (filters.from) params.from = filters.from;
+      if (filters.to) params.to = filters.to;
+      const res = await api.get<Payment[]>('/payments', { params });
       setPayments(res.data);
     } catch {
       setPayments([]);
@@ -62,35 +113,109 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
+  // Autocomplete para seleccionar cliente al crear pago
+  const handleClientInputChange = async (_: any, value: string) => {
+    setClientSearch(value);
+    if (!value) {
+      setClientOptions([]);
+      return;
+    }
+    setClientLoading(true);
+    try {
+      const res = await api.get<ClientOption[]>('/clients/search', { params: { q: value } });
+      setClientOptions(res.data);
+    } catch {
+      setClientOptions([]);
+    } finally {
+      setClientLoading(false);
+    }
+  };
+
+  // Cuando selecciono un cliente, busco su suscripción vigente
+  const handleClientChange = async (_: any, value: ClientOption | null) => {
+    setForm(f => ({
+      ...f,
+      clientId: value ? value.id : '',
+      subscriptionId: '',
+      amount: '',
+    }));
+    setCurrentSubscription(null);
+    setSubscriptionError('');
+    if (value && value.id) {
+      setSubscriptionLoading(true);
+      try {
+        // Traer la última suscripción vigente del cliente
+        const res = await api.get<Subscription[]>('/subscriptions', {
+          params: { clientId: value.id, status: 'VIGENTE' }
+        });
+        if (res.data.length > 0) {
+          const sub = res.data[0];
+          setCurrentSubscription(sub);
+          setForm(f => ({
+            ...f,
+            subscriptionId: sub.id,
+            amount: sub.plan.price.toString(),
+          }));
+        } else {
+          setCurrentSubscription(null);
+          setSubscriptionError('El cliente no tiene una suscripción vigente.');
+        }
+      } catch {
+        setCurrentSubscription(null);
+        setSubscriptionError('Error buscando la suscripción vigente.');
+      }
+      setSubscriptionLoading(false);
+    }
+  };
+
+  // Autocomplete para filtro de cliente
+  const handleFilterClientInputChange = async (_: any, value: string) => {
+    if (!value) {
+      setFilterClientOptions([]);
+      return;
+    }
+    setFilterClientLoading(true);
+    try {
+      const res = await api.get<ClientOption[]>('/clients/search', { params: { q: value } });
+      setFilterClientOptions(res.data);
+    } catch {
+      setFilterClientOptions([]);
+    } finally {
+      setFilterClientLoading(false);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/payments', {
+      const payload = {
         ...form,
+        type: 'SUBSCRIPTION',
         amount: Number(form.amount) || 0,
-        subscriptionId: form.subscriptionId || undefined,
-        providerPaymentId: form.providerPaymentId || undefined,
         currency: form.currency || undefined,
         status: form.status || undefined,
         method: form.method || undefined,
-        type: form.type || undefined,
         notes: form.notes || undefined,
         receiptUrl: form.receiptUrl || undefined,
-      });
+      };
+      if (!form.subscriptionId || form.subscriptionId.trim() === '') {
+        delete payload.subscriptionId;
+      }
+      await api.post('/payments', payload);
       setOpen(false);
       setForm({
-        userId: '',
+        clientId: '',
         provider: '',
         method: '',
-        type: '',
         amount: '',
         currency: 'ARS',
         status: 'PENDING',
         subscriptionId: '',
-        providerPaymentId: '',
         notes: '',
         receiptUrl: '',
       });
+      setCurrentSubscription(null);
+      setSubscriptionError('');
       fetchPayments();
     } catch (err) {
       alert('Error al crear el pago');
@@ -111,11 +236,89 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
+  // Filtros handlers
+  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters({ ...filters, [e.target.name]: e.target.value });
+  };
+
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
         Pagos
       </Typography>
+      {/* Filtros */}
+      <Box sx={{ mb: 2 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={3}>
+            <Autocomplete
+              freeSolo
+              options={filterClientOptions}
+              loading={filterClientLoading}
+              getOptionLabel={option => typeof option === 'string' ? option : `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}`}
+              onInputChange={handleFilterClientInputChange}
+              onChange={(_, value) => {
+                setFilters(f => ({
+                  ...f,
+                  email: typeof value === 'string'
+                    ? value
+                    : value?.email || '',
+                  name: typeof value === 'string'
+                    ? value
+                    : value?.name || ''
+                }));
+              }}
+              renderInput={params => (
+                <TextField {...params} label="Buscar cliente/email/DNI" size="small" />
+              )}
+            />
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <TextField
+              label="Estado"
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              select
+              size="small"
+              fullWidth
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {paymentStatus.map(s => (
+                <MenuItem key={s} value={s}>{s}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <TextField
+              label="Fecha desde"
+              name="from"
+              type="date"
+              value={filters.from}
+              onChange={handleFilterChange}
+              size="small"
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <TextField
+              label="Fecha hasta"
+              name="to"
+              type="date"
+              value={filters.to}
+              onChange={handleFilterChange}
+              size="small"
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <Button variant="outlined" onClick={fetchPayments} sx={{ height: '100%' }}>
+              Buscar
+            </Button>
+          </Grid>
+        </Grid>
+      </Box>
       <Button variant="contained" sx={{ mb: 2 }} onClick={() => setOpen(true)}>
         Agregar Pago
       </Button>
@@ -125,8 +328,9 @@ const PaymentsPage: React.FC = () => {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Usuario</TableCell>
+              <TableCell>Cliente</TableCell>
               <TableCell>Email</TableCell>
+              <TableCell>DNI</TableCell>
               <TableCell>Proveedor</TableCell>
               <TableCell>Método</TableCell>
               <TableCell>Tipo</TableCell>
@@ -140,8 +344,9 @@ const PaymentsPage: React.FC = () => {
           <TableBody>
             {payments.map(payment => (
               <TableRow key={payment.id}>
-                <TableCell>{payment.user?.name || payment.userId}</TableCell>
-                <TableCell>{payment.user?.email || '-'}</TableCell>
+                <TableCell>{payment.client?.name || payment.clientId}</TableCell>
+                <TableCell>{payment.client?.email || '-'}</TableCell>
+                <TableCell>{payment.client?.dni || '-'}</TableCell>
                 <TableCell>{payment.provider}</TableCell>
                 <TableCell>{payment.method}</TableCell>
                 <TableCell>{payment.type}</TableCell>
@@ -170,14 +375,40 @@ const PaymentsPage: React.FC = () => {
       <Dialog open={open} onClose={() => setOpen(false)}>
         <DialogTitle>Agregar Pago</DialogTitle>
         <form onSubmit={handleCreate}>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 300 }}>
-            <TextField
-              label="ID de Usuario"
-              name="userId"
-              value={form.userId}
-              onChange={handleChange}
-              required
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 350 }}>
+            <Autocomplete
+              options={clientOptions}
+              loading={clientLoading}
+              getOptionLabel={option => option ? `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}` : ''}
+              onInputChange={handleClientInputChange}
+              onChange={handleClientChange}
+              renderInput={params => (
+                <TextField {...params} label="Cliente (buscar por nombre, mail o DNI)" required />
+              )}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
             />
+            {subscriptionLoading && <Typography color="info.main">Buscando suscripción vigente...</Typography>}
+            {currentSubscription && (
+              <Box sx={{ mb: 1 }}>
+                <Typography variant="body2" color="success.main">
+                  Suscripción vigente: {currentSubscription.plan.name} (${currentSubscription.plan.price})<br />
+                  Vigencia: {currentSubscription.startDate.slice(0,10)} a {currentSubscription.endDate.slice(0,10)}
+                </Typography>
+              </Box>
+            )}
+            {subscriptionError && (
+              <Typography color="error" sx={{ mb: 1 }}>
+                {subscriptionError}
+              </Typography>
+            )}
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setOpenCreateClient(true)}
+              sx={{ mt: 1 }}
+            >
+              ¿No encuentras el cliente? Crear nuevo
+            </Button>
             <TextField
               label="Proveedor"
               name="provider"
@@ -203,23 +434,13 @@ const PaymentsPage: React.FC = () => {
               ))}
             </TextField>
             <TextField
-              label="Tipo de pago"
-              name="type"
-              value={form.type}
-              onChange={handleChange}
-              select
-            >
-              {paymentTypes.map(t => (
-                <MenuItem key={t} value={t}>{t}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
               label="Monto"
               name="amount"
               type="number"
               value={form.amount}
               onChange={handleChange}
               required
+              InputProps={{ readOnly: true }}
             />
             <TextField
               label="Moneda"
@@ -238,18 +459,16 @@ const PaymentsPage: React.FC = () => {
                 <MenuItem key={s} value={s}>{s}</MenuItem>
               ))}
             </TextField>
-            <TextField
+            {/* El campo de tipo de pago se elimina, siempre será SUBSCRIPTION */}
+            {/* <TextField ... /> */}
+            {/* El campo de suscripciónId es oculto, se setea automáticamente */}
+            {/* <TextField
               label="ID de Suscripción"
               name="subscriptionId"
               value={form.subscriptionId}
               onChange={handleChange}
-            />
-            <TextField
-              label="ID de Pago del Proveedor"
-              name="providerPaymentId"
-              value={form.providerPaymentId}
-              onChange={handleChange}
-            />
+              disabled
+            /> */}
             <TextField
               label="Notas"
               name="notes"
@@ -265,9 +484,59 @@ const PaymentsPage: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" variant="contained">Guardar</Button>
+            <Button type="submit" variant="contained" disabled={!!subscriptionError || subscriptionLoading}>
+              Guardar
+            </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Modal para crear cliente */}
+      <Dialog open={openCreateClient} onClose={() => setOpenCreateClient(false)}>
+        <DialogTitle>Crear nuevo cliente</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 350 }}>
+          <TextField
+            label="Nombre"
+            value={newClient.name}
+            onChange={e => setNewClient(c => ({ ...c, name: e.target.value }))}
+            required
+          />
+          <TextField
+            label="Email"
+            value={newClient.email}
+            onChange={e => setNewClient(c => ({ ...c, email: e.target.value }))}
+            required
+            type="email"
+          />
+          <TextField
+            label="DNI"
+            value={newClient.dni}
+            onChange={e => setNewClient(c => ({ ...c, dni: e.target.value }))}
+            required
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCreateClient(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              setCreatingClient(true);
+              try {
+                const res = await api.post<ClientOption>('/clients', newClient);
+                setClientOptions(opts => [res.data, ...opts]);
+                setForm(f => ({ ...f, clientId: res.data.id }));
+                setOpenCreateClient(false);
+                setNewClient({ name: '', email: '', dni: '' });
+              } catch {
+                alert('Error al crear cliente');
+              }
+              setCreatingClient(false);
+            }}
+            disabled={creatingClient}
+          >
+            Crear
+          </Button>
+        </DialogActions>
       </Dialog>
     </Paper>
   );

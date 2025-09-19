@@ -10,6 +10,7 @@ import { SettingsPage } from '../pages/SettingsPage';
 import MembersPage from '../pages/MembersPage';
 import PaymentsPage from '../pages/PaymentsPage';
 import SubscriptionsPage from '../pages/SubscriptionsPage';
+import PlansPage from '../pages/PlansPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -76,5 +77,15 @@ export const AppRoutes = () => (
         </PrivateRoute>
       }
     />
+    <Route
+      path="/plans"
+      element={
+        <PrivateRoute>
+          <PlansPage />
+        </PrivateRoute>
+      }
+    />
   </Routes>
 );
+
+export default AppRoutes;
