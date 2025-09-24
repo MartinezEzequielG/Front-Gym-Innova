@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { api } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Payment {
   id: string;
@@ -89,6 +90,8 @@ const PaymentsPage: React.FC = () => {
   const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState('');
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchPayments();
@@ -202,21 +205,10 @@ const PaymentsPage: React.FC = () => {
         delete payload.subscriptionId;
       }
       await api.post('/payments', payload);
-      setOpen(false);
-      setForm({
-        clientId: '',
-        provider: '',
-        method: '',
-        amount: '',
-        currency: 'ARS',
-        status: 'PENDING',
-        subscriptionId: '',
-        notes: '',
-        receiptUrl: '',
-      });
-      setCurrentSubscription(null);
-      setSubscriptionError('');
       fetchPayments();
+      setOpen(false);
+      // Navega a suscripciones para refrescar el estado
+      navigate('/subscriptions');
     } catch (err) {
       alert('Error al crear el pago');
     }
