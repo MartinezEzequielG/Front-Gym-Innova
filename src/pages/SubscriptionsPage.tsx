@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack,
-  Autocomplete, MenuItem, Chip
+  Autocomplete, MenuItem, Chip, Box
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { useLocation } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 
 interface Subscription {
@@ -30,6 +33,7 @@ const SubscriptionsPage: React.FC = () => {
   const [clientLoading, setClientLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     clientId: '',
     planId: '',
@@ -37,20 +41,57 @@ const SubscriptionsPage: React.FC = () => {
     endDate: '',
   });
   const [saving, setSaving] = useState(false);
+  const location = useLocation();
 
-  // Cargar planes y suscripciones
+  // Cargar suscripciones con headers anti-cache
   const fetchSubs = async () => {
-    const res = await api.get<Subscription[]>('/subscriptions');
-    setSubs(res.data);
-  };
-  const fetchPlans = async () => {
-    const res = await api.get<Plan[]>('/plans');
-    setPlans(res.data);
+    setLoading(true);
+    try {
+      const res = await api.get<Subscription[]>('/subscriptions', {
+        params: { _t: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      console.log('Datos de suscripciones recibidos:', res.data); // AGREGA ESTO
+      setSubs(res.data);
+    } catch {
+      setSubs([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const fetchPlans = async () => {
+    try {
+      const res = await api.get<Plan[]>('/plans');
+      setPlans(res.data);
+    } catch {
+      setPlans([]);
+    }
+  };
+
+  // Refresca automáticamente cuando cambias de página o cargas por primera vez
   useEffect(() => {
     fetchSubs();
     fetchPlans();
+  }, [location.pathname]);
+
+  // También refresca cuando la página se vuelve visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchSubs();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Autocomplete para clientes
@@ -87,7 +128,7 @@ const SubscriptionsPage: React.FC = () => {
         endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
       });
       handleClose();
-      fetchSubs();
+      fetchSubs(); // Refresca después de crear
     } catch {
       alert('Error al crear la suscripción');
     }
@@ -99,37 +140,77 @@ const SubscriptionsPage: React.FC = () => {
       <Typography variant="h5" gutterBottom>
         Suscripciones
       </Typography>
-      <Button variant="contained" onClick={handleOpen} sx={{ mb: 2 }}>
-        Crear suscripción
-      </Button>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Cliente</TableCell>
-            <TableCell>Email</TableCell>
-            <TableCell>DNI</TableCell>
-            <TableCell>Plan</TableCell>
-            <TableCell>Inicio</TableCell>
-            <TableCell>Fin</TableCell>
-            <TableCell>Estado</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {subs.map(sub => (
-            <TableRow key={sub.id}>
-              <TableCell>{sub.client?.name || '-'}</TableCell>
-              <TableCell>{sub.client?.email || '-'}</TableCell>
-              <TableCell>{sub.client?.dni || '-'}</TableCell>
-              <TableCell>{sub.plan?.name || '-'}</TableCell>
-              <TableCell>{sub.startDate.slice(0, 10)}</TableCell>
-              <TableCell>{sub.endDate.slice(0, 10)}</TableCell>
-              <TableCell>
-                <Chip label={sub.status || 'VIGENTE'} color={sub.status === 'VENCIDA' ? 'error' : 'success'} size="small" />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <Box sx={{ mb: 2 }}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleOpen}
+          sx={{ mr: 1 }}
+        >
+          Crear suscripción
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={fetchSubs}
+          disabled={loading}
+        >
+          {loading ? 'Refrescando...' : 'Refrescar'}
+        </Button>
+      </Box>
+
+      {loading ? (
+        <Typography variant="body2">Cargando suscripciones...</Typography>
+      ) : (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Cliente</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>DNI</TableCell>
+                <TableCell>Plan</TableCell>
+                <TableCell>Inicio</TableCell>
+                <TableCell>Fin</TableCell>
+                <TableCell>Estado</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {subs.map(sub => (
+                <TableRow key={sub.id}>
+                  <TableCell>{sub.client?.name || '-'}</TableCell>
+                  <TableCell>{sub.client?.email || '-'}</TableCell>
+                  <TableCell>{sub.client?.dni || '-'}</TableCell>
+                  <TableCell>{sub.plan?.name || '-'}</TableCell>
+                  <TableCell>{sub.startDate.slice(0, 10)}</TableCell>
+                  <TableCell>{sub.endDate.slice(0, 10)}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={sub.status || 'PENDIENTE_PAGO'} 
+                      color={
+                        sub.status === 'VIGENTE' ? 'success' : 
+                        sub.status === 'VENCIDA' ? 'error' : 
+                        'warning'
+                      } 
+                      size="small" 
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {subs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      No hay suscripciones registradas
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>Nueva suscripción</DialogTitle>
         <DialogContent>
@@ -182,7 +263,7 @@ const SubscriptionsPage: React.FC = () => {
               <DialogActions>
                 <Button onClick={handleClose}>Cancelar</Button>
                 <Button type="submit" variant="contained" disabled={saving}>
-                  Crear suscripción
+                  {saving ? 'Guardando...' : 'Crear suscripción'}
                 </Button>
               </DialogActions>
             </Stack>

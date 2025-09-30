@@ -2,11 +2,40 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import axios from 'axios';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
-// Configuración global de Axios para el backend
+// Configuración global de Axios para el backend con headers anti-cache
 export const api = axios.create({
   baseURL: 'http://localhost:3000',
   withCredentials: true,
+  headers: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  }
 });
+
+// Interceptor para agregar timestamp a todas las requests GET
+api.interceptors.request.use((config) => {
+  // Solo agregar timestamp a GET requests para evitar cache
+  if (config.method === 'get') {
+    config.params = {
+      ...(config.params || {}), // <-- CAMBIO AQUÍ: usa {} como fallback
+      _t: Date.now()
+    };
+  }
+  return config;
+});
+
+// Interceptor para manejar errores de respuesta (opcional)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Si el token expira, redirigir al login
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 interface User {
   id: string;
@@ -57,8 +86,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    await api.post('/auth/logout');
-    setUser(null);
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Ignorar errores de logout
+    } finally {
+      setUser(null);
+      // Opcional: limpiar cualquier cache local
+      localStorage.clear();
+      sessionStorage.clear();
+    }
   };
 
   return (

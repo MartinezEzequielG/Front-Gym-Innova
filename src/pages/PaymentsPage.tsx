@@ -4,7 +4,6 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { api } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 interface Payment {
   id: string;
@@ -86,12 +85,10 @@ const PaymentsPage: React.FC = () => {
   const [filterClientOptions, setFilterClientOptions] = useState<ClientOption[]>([]);
   const [filterClientLoading, setFilterClientLoading] = useState(false);
 
-  // Suscripción vigente
+  // Suscripción pendiente
   const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState('');
-
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetchPayments();
@@ -134,7 +131,7 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
-  // Cuando selecciono un cliente, busco su suscripción vigente
+  // Cuando selecciono un cliente, busco su suscripción pendiente de pago
   const handleClientChange = async (_: any, value: ClientOption | null) => {
     setForm(f => ({
       ...f,
@@ -147,9 +144,9 @@ const PaymentsPage: React.FC = () => {
     if (value && value.id) {
       setSubscriptionLoading(true);
       try {
-        // Traer la última suscripción vigente del cliente
-        const res = await api.get<Subscription[]>('/subscriptions', {
-          params: { clientId: value.id, status: 'VIGENTE' }
+        // CAMBIO: Usar el nuevo endpoint filtrado por cliente
+        const res = await api.get<Subscription[]>(`/subscriptions/by-client/${value.id}`, {
+          params: { status: 'PENDIENTE_PAGO' }
         });
         if (res.data.length > 0) {
           const sub = res.data[0];
@@ -161,11 +158,11 @@ const PaymentsPage: React.FC = () => {
           }));
         } else {
           setCurrentSubscription(null);
-          setSubscriptionError('El cliente no tiene una suscripción vigente.');
+          setSubscriptionError('El cliente no tiene una suscripción pendiente de pago.');
         }
       } catch {
         setCurrentSubscription(null);
-        setSubscriptionError('Error buscando la suscripción vigente.');
+        setSubscriptionError('Error buscando la suscripción pendiente.');
       }
       setSubscriptionLoading(false);
     }
@@ -207,10 +204,30 @@ const PaymentsPage: React.FC = () => {
       await api.post('/payments', payload);
       fetchPayments();
       setOpen(false);
-      // Navega a suscripciones para refrescar el estado
-      navigate('/subscriptions');
-    } catch (err) {
-      alert('Error al crear el pago');
+      setForm({
+        clientId: '',
+        provider: '',
+        method: '',
+        amount: '',
+        currency: 'ARS',
+        status: 'PENDING',
+        subscriptionId: '',
+        notes: '',
+        receiptUrl: '',
+      });
+      setCurrentSubscription(null);
+      setSubscriptionError('');
+      alert('Pago registrado correctamente. El estado de la suscripción se ha actualizado.');
+    } catch (err: any) {
+      // MEJORA: Manejo específico de errores de validación
+      if (err?.response?.status === 400 && err?.response?.data?.message) {
+        alert(`Error de validación: ${err.response.data.message}`);
+        // Limpiar la suscripción seleccionada si hay error de asociación
+        setCurrentSubscription(null);
+        setForm(f => ({ ...f, subscriptionId: '', amount: '' }));
+      } else {
+        alert('Error al crear el pago');
+      }
     }
   };
 
@@ -379,11 +396,11 @@ const PaymentsPage: React.FC = () => {
               )}
               isOptionEqualToValue={(option, value) => option.id === value.id}
             />
-            {subscriptionLoading && <Typography color="info.main">Buscando suscripción vigente...</Typography>}
+            {subscriptionLoading && <Typography color="info.main">Buscando suscripción pendiente...</Typography>}
             {currentSubscription && (
               <Box sx={{ mb: 1 }}>
                 <Typography variant="body2" color="success.main">
-                  Suscripción vigente: {currentSubscription.plan.name} (${currentSubscription.plan.price})<br />
+                  Suscripción pendiente: {currentSubscription.plan.name} (${currentSubscription.plan.price})<br />
                   Vigencia: {currentSubscription.startDate.slice(0,10)} a {currentSubscription.endDate.slice(0,10)}
                 </Typography>
               </Box>
@@ -451,16 +468,6 @@ const PaymentsPage: React.FC = () => {
                 <MenuItem key={s} value={s}>{s}</MenuItem>
               ))}
             </TextField>
-            {/* El campo de tipo de pago se elimina, siempre será SUBSCRIPTION */}
-            {/* <TextField ... /> */}
-            {/* El campo de suscripciónId es oculto, se setea automáticamente */}
-            {/* <TextField
-              label="ID de Suscripción"
-              name="subscriptionId"
-              value={form.subscriptionId}
-              onChange={handleChange}
-              disabled
-            /> */}
             <TextField
               label="Notas"
               name="notes"
