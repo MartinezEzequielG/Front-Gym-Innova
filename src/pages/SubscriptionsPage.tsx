@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 
 interface Subscription {
@@ -42,6 +42,7 @@ const SubscriptionsPage: React.FC = () => {
   });
   const [saving, setSaving] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Cargar suscripciones con headers anti-cache
   const fetchSubs = async () => {
@@ -135,6 +136,36 @@ const SubscriptionsPage: React.FC = () => {
     setSaving(false);
   };
 
+  // CAMBIO: Función de renovar mejorada
+  const handleRenew = async (subscription: Subscription) => {
+    try {
+      // Primero obtener el precio actual del plan
+      const planRes = await api.get(`/plans/${subscription.plan.id}`);
+      const currentPlan = planRes.data;
+      
+      // Renovar la suscripción
+      const res = await api.patch(`/subscriptions/${subscription.id}/renew`);
+      const newSubscription = res.data;
+      
+      // Asegurar que la nueva suscripción tenga el precio actualizado del plan
+      newSubscription.plan = currentPlan;
+      
+      // Refrescar el listado
+      fetchSubs();
+      
+      // Navegar a payments con los datos completos
+      navigate('/payments', { 
+        state: { 
+          renewedSubscription: newSubscription,
+          preselectedClient: subscription.client
+        } 
+      });
+      
+    } catch (err: any) {
+      alert(`Error al renovar suscripción: ${err?.response?.data?.message || 'Error desconocido'}`);
+    }
+  };
+
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
@@ -162,8 +193,8 @@ const SubscriptionsPage: React.FC = () => {
       {loading ? (
         <Typography variant="body2">Cargando suscripciones...</Typography>
       ) : (
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table>
+        <Box sx={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto' }}>
+          <Table stickyHeader>
             <TableHead>
               <TableRow>
                 <TableCell>Cliente</TableCell>
@@ -173,6 +204,7 @@ const SubscriptionsPage: React.FC = () => {
                 <TableCell>Inicio</TableCell>
                 <TableCell>Fin</TableCell>
                 <TableCell>Estado</TableCell>
+                <TableCell>Acciones</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -195,11 +227,23 @@ const SubscriptionsPage: React.FC = () => {
                       size="small" 
                     />
                   </TableCell>
+                  <TableCell>
+                    {sub.status === 'VENCIDA' && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => handleRenew(sub)}
+                      >
+                        Renovar
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {subs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     <Typography variant="body2" color="text.secondary">
                       No hay suscripciones registradas
                     </Typography>

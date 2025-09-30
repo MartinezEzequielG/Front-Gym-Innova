@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { api } from '../context/AuthContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface Payment {
   id: string;
@@ -90,10 +91,46 @@ const PaymentsPage: React.FC = () => {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState('');
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   useEffect(() => {
     fetchPayments();
     // eslint-disable-next-line
   }, [filters]);
+
+  // Al cargar la página, verificar si viene con datos de renovación
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.renewedSubscription && state?.preselectedClient) {
+      const { renewedSubscription, preselectedClient } = state;
+      
+      console.log('Datos de renovación recibidos:', { renewedSubscription, preselectedClient });
+      
+      // Agregar el cliente preseleccionado a las opciones
+      setClientOptions([preselectedClient]);
+      
+      // Preseleccionar el cliente y la suscripción
+      setCurrentSubscription(renewedSubscription);
+      setForm(f => ({
+        ...f,
+        clientId: preselectedClient.id,
+        subscriptionId: renewedSubscription.id,
+        amount: renewedSubscription.plan.price.toString(),
+        provider: 'manual', // Valor por defecto
+        method: 'CASH', // Valor por defecto
+        status: 'APPROVED' // Sugerir estado aprobado para renovaciones
+      }));
+      
+      // Abrir automáticamente el modal de pago
+      setTimeout(() => {
+        setOpen(true);
+      }, 100);
+      
+      // Limpiar el state para que no se repita
+      navigate('/payments', { replace: true });
+    }
+  }, [location.state, navigate]);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -334,50 +371,65 @@ const PaymentsPage: React.FC = () => {
       {loading ? (
         <Typography variant="body2">Cargando...</Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Cliente</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>DNI</TableCell>
-              <TableCell>Proveedor</TableCell>
-              <TableCell>Método</TableCell>
-              <TableCell>Tipo</TableCell>
-              <TableCell>Monto</TableCell>
-              <TableCell>Estado</TableCell>
-              <TableCell>Notas</TableCell>
-              <TableCell>Comprobante</TableCell>
-              <TableCell>Fecha</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {payments.map(payment => (
-              <TableRow key={payment.id}>
-                <TableCell>{payment.client?.name || payment.clientId}</TableCell>
-                <TableCell>{payment.client?.email || '-'}</TableCell>
-                <TableCell>{payment.client?.dni || '-'}</TableCell>
-                <TableCell>{payment.provider}</TableCell>
-                <TableCell>{payment.method}</TableCell>
-                <TableCell>{payment.type}</TableCell>
-                <TableCell>
-                  {payment.amount} {payment.currency}
-                </TableCell>
-                <TableCell>
-                  <Chip label={payment.status} color={statusColor(payment.status)} size="small" />
-                </TableCell>
-                <TableCell>{payment.notes}</TableCell>
-                <TableCell>
-                  {payment.receiptUrl ? (
-                    <a href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">Ver</a>
-                  ) : '-'}
-                </TableCell>
-                <TableCell>
-                  {new Date(payment.createdAt).toLocaleString()}
-                </TableCell>
+        <Box sx={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto' }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell>Cliente</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>DNI</TableCell>
+                <TableCell>Proveedor</TableCell>
+                <TableCell>Método</TableCell>
+                <TableCell>Tipo</TableCell>
+                <TableCell>Monto</TableCell>
+                <TableCell>Estado</TableCell>
+                <TableCell>Notas</TableCell>
+                <TableCell>Comprobante</TableCell>
+                <TableCell>Fecha</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {payments.map(payment => (
+                <TableRow key={payment.id}>
+                  <TableCell>{payment.client?.name || payment.clientId}</TableCell>
+                  <TableCell>{payment.client?.email || '-'}</TableCell>
+                  <TableCell>{payment.client?.dni || '-'}</TableCell>
+                  <TableCell>{payment.provider}</TableCell>
+                  <TableCell>{payment.method}</TableCell>
+                  <TableCell>{payment.type}</TableCell>
+                  <TableCell>
+                    ${payment.amount} {payment.currency}
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={payment.status} color={statusColor(payment.status)} size="small" />
+                  </TableCell>
+                  <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {payment.notes || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {payment.receiptUrl ? (
+                      <Button size="small" href={payment.receiptUrl} target="_blank" rel="noopener noreferrer">
+                        Ver
+                      </Button>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: 120 }}>
+                    {new Date(payment.createdAt).toLocaleDateString()} {new Date(payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {payments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={11} align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      No se encontraron pagos con los filtros aplicados
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
       )}
 
       {/* Modal para agregar pago */}
