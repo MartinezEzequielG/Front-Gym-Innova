@@ -13,6 +13,8 @@ interface Subscription {
   id: string;
   client: { id: string; name: string; email: string; dni?: string };
   plan: { id: string; name: string };
+  branchId: string; 
+  branch?: { id: string; name: string; address: string }; 
   startDate: string;
   endDate: string;
   status?: string;
@@ -25,22 +27,29 @@ interface ClientOption {
   dni?: string;
 }
 interface Plan { id: string; name: string; }
+interface Branch {
+  id: string;
+  name: string;
+  address: string;
+}
 
 const SubscriptionsPage: React.FC = () => {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [clientLoading, setClientLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     clientId: '',
     planId: '',
+    branchId: '', // NUEVO
     startDate: '',
     endDate: '',
   });
-  const [saving, setSaving] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -65,19 +74,29 @@ const SubscriptionsPage: React.FC = () => {
     }
   };
 
-  const fetchPlans = async () => {
+  const fetchPlans = async (branchId: string) => {
+    if (!branchId) return;
     try {
-      const res = await api.get<Plan[]>('/plans');
+      const res = await api.get<Plan[]>(`/plans/by-branch/${branchId}`);
       setPlans(res.data);
     } catch {
       setPlans([]);
     }
   };
 
+  const fetchBranches = async () => {
+    try {
+      const res = await api.get<Branch[]>('/branches');
+      setBranches(res.data);
+    } catch {
+      setBranches([]);
+    }
+  };
+
   // Refresca automáticamente cuando cambias de página o cargas por primera vez
   useEffect(() => {
     fetchSubs();
-    fetchPlans();
+    fetchBranches();
   }, [location.pathname]);
 
   // También refresca cuando la página se vuelve visible
@@ -116,7 +135,7 @@ const SubscriptionsPage: React.FC = () => {
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
-    setForm({ clientId: '', planId: '', startDate: '', endDate: '' });
+    setForm({ clientId: '', planId: '', branchId: '', startDate: '', endDate: '' });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -166,6 +185,12 @@ const SubscriptionsPage: React.FC = () => {
     }
   };
 
+  // Cuando cambia la sucursal en el formulario:
+  const handleBranchChange = (branchId: string) => {
+    setForm(f => ({ ...f, branchId, planId: '' })); // Limpiar plan seleccionado
+    fetchPlans(branchId);
+  };
+
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
@@ -200,6 +225,7 @@ const SubscriptionsPage: React.FC = () => {
                 <TableCell>Cliente</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>DNI</TableCell>
+                <TableCell>Sucursal</TableCell> {/* NUEVO */}
                 <TableCell>Plan</TableCell>
                 <TableCell>Inicio</TableCell>
                 <TableCell>Fin</TableCell>
@@ -213,6 +239,7 @@ const SubscriptionsPage: React.FC = () => {
                   <TableCell>{sub.client?.name || '-'}</TableCell>
                   <TableCell>{sub.client?.email || '-'}</TableCell>
                   <TableCell>{sub.client?.dni || '-'}</TableCell>
+                  <TableCell>{sub.branch?.name || '-'}</TableCell> {/* NUEVO */}
                   <TableCell>{sub.plan?.name || '-'}</TableCell>
                   <TableCell>{sub.startDate.slice(0, 10)}</TableCell>
                   <TableCell>{sub.endDate.slice(0, 10)}</TableCell>
@@ -274,6 +301,18 @@ const SubscriptionsPage: React.FC = () => {
                 )}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
               />
+              <TextField
+                label="Sucursal"
+                select
+                value={form.branchId}
+                onChange={e => handleBranchChange(e.target.value)}
+                required
+                fullWidth
+              >
+                {branches.map(b => (
+                  <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+                ))}
+              </TextField>
               <TextField
                 label="Plan"
                 select

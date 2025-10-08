@@ -12,11 +12,17 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { api } from '../context/AuthContext';
+import { BranchSelector } from '../components/BranchSelector';
 
 interface Client {
   id?: string;
   name?: string;
   subscriptionStatus?: string;
+}
+
+interface Branch {
+  id: string;
+  name: string;
 }
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -26,6 +32,8 @@ const ReceptionPage: React.FC = () => {
   const [client, setClient] = useState<Client | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,20 +54,38 @@ const ReceptionPage: React.FC = () => {
     };
   }, [status]);
 
+  useEffect(() => {
+    const loadBranches = async () => {
+      try {
+        const res = await api.get('/branches');
+        setBranches(res.data);
+        if (res.data.length > 0) {
+          setSelectedBranchId(res.data[0].id);
+        }
+      } catch {
+        setBranches([]);
+      }
+    };
+    loadBranches();
+  }, []);
+
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus('loading');
     setError('');
     setClient(null);
     try {
-      const res = await api.get<Client>(`/clients/dni/${dni}`);
-      setClient(res.data);
+      const res = await api.post('/attendance/quick-checkin', {
+        dni,
+        branchId: selectedBranchId,
+      });
+      setClient(res.data.client);
       setStatus('success');
     } catch (err: any) {
       setError(
         err?.response?.status === 404
           ? 'No se encontró un cliente con ese DNI.'
-          : 'Error al conectar con el servidor.'
+          : err?.response?.data?.message || 'Error al conectar con el servidor.'
       );
       setStatus('error');
     }
@@ -153,6 +179,13 @@ const ReceptionPage: React.FC = () => {
             inputRef={inputRef}
             onKeyDown={handleInputKeyDown}
             autoFocus
+          />
+          <BranchSelector
+            branches={branches}
+            value={selectedBranchId}
+            onChange={setSelectedBranchId}
+            required
+            label="Sucursal actual"
           />
           <Button
             type="submit"

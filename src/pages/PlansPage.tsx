@@ -1,20 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper,
-  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack, Box
 } from '@mui/material';
 import { api } from '../context/AuthContext';
+import { BranchSelector } from '../components/BranchSelector';
 
 interface Plan {
   id: string;
   name: string;
   description?: string;
   price: number;
-  durationDays: number; // en días
+  durationDays: number;
+  branchId: string; // NUEVO
+  branch?: { id: string; name: string; address: string }; // NUEVO
+}
+
+interface Branch {
+  id: string;
+  name: string;
+  address: string;
 }
 
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -22,14 +32,29 @@ const PlansPage: React.FC = () => {
     description: '',
     price: '',
     durationDays: '',
+    branchId: '', // NUEVO
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+
+  const loadBranches = async () => {
+    try {
+      const res = await api.get<Branch[]>('/branches');
+      setBranches(res.data);
+      if (res.data.length > 0) {
+        setSelectedBranchId(res.data[0].id);
+      }
+    } catch {
+      setBranches([]);
+    }
+  };
 
   const loadPlans = async () => {
     setLoading(true);
     try {
-      const res = await api.get<Plan[]>('/plans');
+      const params = selectedBranchId ? { branchId: selectedBranchId } : {};
+      const res = await api.get<Plan[]>('/plans', { params });
       setPlans(res.data);
     } catch {
       setPlans([]);
@@ -38,13 +63,19 @@ const PlansPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadPlans();
+    loadBranches();
   }, []);
+
+  useEffect(() => {
+    if (selectedBranchId) {
+      loadPlans();
+    }
+  }, [selectedBranchId]);
 
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
-    setForm({ name: '', description: '', price: '', durationDays: '' });
+    setForm({ name: '', description: '', price: '', durationDays: '', branchId: '' }); 
     setError('');
   };
 
@@ -57,6 +88,7 @@ const PlansPage: React.FC = () => {
         description: form.description,
         price: Number(form.price),
         durationDays: Number(form.durationDays),
+        branchId: form.branchId, // NUEVO
       };
       const res = await api.post<Plan>('/plans', payload);
       setPlans([res.data, ...plans]);
@@ -84,10 +116,19 @@ const PlansPage: React.FC = () => {
       <Button variant="contained" onClick={handleOpen} sx={{ mb: 2 }}>
         Crear plan
       </Button>
+      <Box sx={{ mb: 2 }}>
+        <BranchSelector
+          branches={branches}
+          value={selectedBranchId}
+          onChange={setSelectedBranchId}
+          label="Filtrar por sucursal"
+        />
+      </Box>
       <Table>
         <TableHead>
           <TableRow>
             <TableCell>Nombre</TableCell>
+            <TableCell>Sucursal</TableCell> {/* NUEVO */}
             <TableCell>Descripción</TableCell>
             <TableCell>Precio</TableCell>
             <TableCell>Duración (días)</TableCell>
@@ -98,6 +139,7 @@ const PlansPage: React.FC = () => {
           {plans.map(plan => (
             <TableRow key={plan.id}>
               <TableCell>{plan.name}</TableCell>
+              <TableCell>{plan.branch?.name || '-'}</TableCell> 
               <TableCell>{plan.description || '-'}</TableCell>
               <TableCell>${plan.price}</TableCell>
               <TableCell>{plan.durationDays}</TableCell>
@@ -142,6 +184,12 @@ const PlansPage: React.FC = () => {
               onChange={e => setForm(f => ({ ...f, durationDays: e.target.value }))}
               required
               fullWidth
+            />
+            <BranchSelector
+              branches={branches}
+              value={form.branchId}
+              onChange={branchId => setForm(f => ({ ...f, branchId }))}
+              required
             />
             {error && <Typography color="error">{error}</Typography>}
           </Stack>

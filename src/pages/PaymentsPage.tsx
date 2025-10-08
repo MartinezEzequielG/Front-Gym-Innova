@@ -181,7 +181,7 @@ const PaymentsPage: React.FC = () => {
     if (value && value.id) {
       setSubscriptionLoading(true);
       try {
-        // CAMBIO: Usar el nuevo endpoint filtrado por cliente
+        // Mantener el endpoint actual, pero el backend ya filtra por sucursal internamente
         const res = await api.get<Subscription[]>(`/subscriptions/by-client/${value.id}`, {
           params: { status: 'PENDIENTE_PAGO' }
         });
