@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import MenuItem from '@mui/material/MenuItem';
 import { api } from '../context/AuthContext';
+import QuickRegisterDialog from '../components/QuickRegisterDialog';
 
 interface Client {
   id: string;
@@ -31,6 +32,7 @@ const MembersPage: React.FC = () => {
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -127,8 +129,11 @@ const MembersPage: React.FC = () => {
         Clientes del gimnasio
       </Typography>
 
-      <Button variant="contained" onClick={handleOpen} sx={{ mb: 2 }}>
+      <Button variant="contained" onClick={handleOpen} sx={{ mb: 2, mr: 2 }}>
         Crear cliente
+      </Button>
+      <Button variant="outlined" color="primary" onClick={() => setQuickOpen(true)} sx={{ mb: 2 }}>
+        Alta rápida (cliente + suscripción + pago)
       </Button>
 
       <Table>
@@ -265,6 +270,15 @@ const MembersPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <QuickRegisterDialog
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        onSuccess={() => {
+          setQuickOpen(false);
+          loadClients();
+        }}
+      />
     </Paper>
   );
 };

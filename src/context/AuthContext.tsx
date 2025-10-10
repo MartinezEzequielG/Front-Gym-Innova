@@ -25,12 +25,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor para manejar errores de respuesta (opcional)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Si el token expira, redirigir al login
-    if (error.response?.status === 401) {
+    if (
+      error.response?.status === 401 &&
+      window.location.pathname !== '/login'
+    ) {
       window.location.href = '/login';
     }
     return Promise.reject(error);
