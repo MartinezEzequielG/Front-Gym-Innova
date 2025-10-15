@@ -91,10 +91,32 @@ const PaymentsPage: React.FC = () => {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState('');
 
+  // MercadoPago states
+  const [mpLoading, setMpLoading] = useState(false);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [qrCode, setQrCode] = useState('');
+  const [showMpModal, setShowMpModal] = useState(false);
+
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Detectar si viene de MercadoPago
+    const urlParams = new URLSearchParams(window.location.search);
+    const mpStatus = urlParams.get('success');
+    
+    if (mpStatus === 'true') {
+      alert('¡Pago aprobado exitosamente!');
+      // Limpiar URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (mpStatus === 'false') {
+      alert('El pago fue rechazado o cancelado.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (mpStatus === 'pending') {
+      alert('El pago está pendiente de aprobación.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     fetchPayments();
     // eslint-disable-next-line
   }, [filters]);
@@ -287,6 +309,41 @@ const PaymentsPage: React.FC = () => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
   };
 
+  // Agregar función para generar link de pago de MercadoPago
+  const generateMpPayment = async () => {
+    if (!form.clientId || !currentSubscription) {
+      alert('Debe seleccionar un cliente con suscripción pendiente');
+      return;
+    }
+
+    setMpLoading(true);
+    try {
+      const payload = {
+        clientId: form.clientId,
+        subscriptionId: form.subscriptionId,
+        amount: Number(form.amount),
+        currency: form.currency || 'ARS',
+        // Datos adicionales para MercadoPago
+        description: `Pago de suscripción - ${currentSubscription.plan.name}`,
+        // URLs de retorno (ajusta según tu dominio)
+        success_url: `${window.location.origin}/payments?success=true`,
+        failure_url: `${window.location.origin}/payments?success=false`,
+        pending_url: `${window.location.origin}/payments?success=pending`,
+      };
+
+      const res = await api.post('/payments/mercadopago/create-preference', payload);
+      
+      setPaymentLink(res.data.initPoint);
+      setQrCode(res.data.qrCode);
+      setShowMpModal(true);
+      
+    } catch (err: any) {
+      alert(`Error al generar pago de MercadoPago: ${err?.response?.data?.message || 'Error desconocido'}`);
+    } finally {
+      setMpLoading(false);
+    }
+  };
+
   return (
     <Paper sx={{ p: 3, mt: 4 }}>
       <Typography variant="h5" gutterBottom>
@@ -386,6 +443,7 @@ const PaymentsPage: React.FC = () => {
                 <TableCell>Notas</TableCell>
                 <TableCell>Comprobante</TableCell>
                 <TableCell>Fecha</TableCell>
+                <TableCell>Link MP</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -415,6 +473,19 @@ const PaymentsPage: React.FC = () => {
                   </TableCell>
                   <TableCell sx={{ minWidth: 120 }}>
                     {new Date(payment.createdAt).toLocaleDateString()} {new Date(payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </TableCell>
+                  <TableCell>
+                    {payment.provider === 'mercado_pago' && payment.receiptUrl ? (
+                      <Button 
+                        size="small" 
+                        href={payment.receiptUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        variant="outlined"
+                      >
+                        Ver en MP
+                      </Button>
+                    ) : '-'}
                   </TableCell>
                 </TableRow>
               ))}
@@ -532,6 +603,27 @@ const PaymentsPage: React.FC = () => {
               value={form.receiptUrl}
               onChange={handleChange}
             />
+            {/* MercadoPago section */}
+            {form.provider === 'mercado_pago' && currentSubscription && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: '#e3f2fd', borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Pago con MercadoPago:</strong><br />
+                  Cliente: {clientOptions.find(c => c.id === form.clientId)?.name}<br />
+                  Plan: {currentSubscription.plan.name}<br />
+                  Monto: ${form.amount} {form.currency}
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={generateMpPayment}
+                  disabled={mpLoading}
+                  fullWidth
+                  sx={{ mb: 1 }}
+                >
+                  {mpLoading ? 'Generando...' : 'Generar Link de Pago'}
+                </Button>
+              </Box>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
@@ -586,6 +678,86 @@ const PaymentsPage: React.FC = () => {
             disabled={creatingClient}
           >
             Crear
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de MercadoPago */}
+      <Dialog open={showMpModal} onClose={() => setShowMpModal(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Link de Pago - MercadoPago</DialogTitle>
+        <DialogContent>
+          <Box sx={{ textAlign: 'center', p: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Pago generado exitosamente
+            </Typography>
+            
+            {/* QR Code */}
+            {qrCode && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  <strong>Escanea el código QR:</strong>
+                </Typography>
+                <img 
+                  src={qrCode} 
+                  alt="QR Code MercadoPago" 
+                  style={{ maxWidth: '200px', height: 'auto' }}
+                />
+              </Box>
+            )}
+            
+            {/* Link directo */}
+            {paymentLink && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  <strong>O usa el link directo:</strong>
+                </Typography>
+                <TextField
+                  value={paymentLink}
+                  fullWidth
+                  InputProps={{
+                    readOnly: true,
+                    endAdornment: (
+                      <Button
+                        onClick={() => navigator.clipboard.writeText(paymentLink)}
+                        size="small"
+                      >
+                        Copiar
+                      </Button>
+                    ),
+                  }}
+                  sx={{ mb: 2 }}
+                />
+                <Button
+                  variant="contained"
+                  color="primary"
+                  href={paymentLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  fullWidth
+                >
+                  Abrir MercadoPago
+                </Button>
+              </Box>
+            )}
+            
+            <Typography variant="body2" color="text.secondary">
+              El pago se registrará automáticamente cuando el cliente complete la transacción.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowMpModal(false)}>
+            Cerrar
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              setShowMpModal(false);
+              setOpen(false); // Cerrar también el modal principal
+              fetchPayments(); // Refrescar pagos
+            }}
+          >
+            Finalizar
           </Button>
         </DialogActions>
       </Dialog>
