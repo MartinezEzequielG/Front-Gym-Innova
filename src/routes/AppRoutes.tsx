@@ -12,6 +12,7 @@ import PaymentsPage from '../pages/PaymentsPage';
 import SubscriptionsPage from '../pages/SubscriptionsPage';
 import PlansPage from '../pages/PlansPage';
 import ReceptionPage from '../pages/ReceptionPage';
+import BranchesPage from '../pages/BranchesPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -83,6 +84,14 @@ export const AppRoutes = () => (
       element={
         <PrivateRoute>
           <PlansPage />
+        </PrivateRoute>
+      }
+    />
+    <Route
+      path="/branches"
+      element={
+        <PrivateRoute>
+          <BranchesPage />
         </PrivateRoute>
       }
     />

@@ -13,6 +13,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import BusinessIcon from '@mui/icons-material/Business';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAuth } from '../context/AuthContext';
@@ -26,13 +27,14 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { label: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-  { label: 'Members', icon: <PeopleIcon />, path: '/members' },
-  { label: 'Users', icon: <GroupIcon />, path: '/users' },
-  { label: 'Payments', icon: <PaymentIcon />, path: '/payments' },
-  { label: 'Subscriptions', icon: <SubscriptionsIcon />, path: '/subscriptions' },
-  { label: 'Plans', icon: <FitnessCenterIcon />, path: '/plans' },
-  { label: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+  { label: 'Panel', icon: <DashboardIcon />, path: '/dashboard' },
+  { label: 'Socios', icon: <PeopleIcon />, path: '/members' },
+  { label: 'Pagos', icon: <PaymentIcon />, path: '/payments' },
+  { label: 'Suscripciones', icon: <SubscriptionsIcon />, path: '/subscriptions' },
+  { label: 'Planes', icon: <FitnessCenterIcon />, path: '/plans' },
+  { label: 'Sucursales', icon: <BusinessIcon />, path: '/branches' },
+  { label: 'Configuración', icon: <SettingsIcon />, path: '/settings' },
+  { label: 'Usuarios', icon: <GroupIcon />, path: '/users' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle }) => {

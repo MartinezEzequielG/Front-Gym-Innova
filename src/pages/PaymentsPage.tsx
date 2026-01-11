@@ -20,6 +20,7 @@ interface Payment {
   currency?: string;
   createdAt: string;
   subscriptionId?: string;
+  branchName?: string | null;
 }
 
 interface ClientOption {
@@ -383,7 +384,7 @@ const PaymentsPage: React.FC = () => {
                 <TableCell>Tipo</TableCell>
                 <TableCell>Monto</TableCell>
                 <TableCell>Estado</TableCell>
-                <TableCell>Notas</TableCell>
+                <TableCell>Sucursal</TableCell>
                 <TableCell>Comprobante</TableCell>
                 <TableCell>Fecha</TableCell>
               </TableRow>
@@ -403,8 +404,8 @@ const PaymentsPage: React.FC = () => {
                   <TableCell>
                     <Chip label={payment.status} color={statusColor(payment.status)} size="small" />
                   </TableCell>
-                  <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {payment.notes || '-'}
+                  <TableCell>
+                    {payment.branchName ?? '—'}
                   </TableCell>
                   <TableCell>
                     {payment.receiptUrl ? (
