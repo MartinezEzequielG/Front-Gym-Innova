@@ -25,7 +25,7 @@ interface Branch {
 const PlansPage: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: '',

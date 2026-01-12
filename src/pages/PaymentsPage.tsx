@@ -296,7 +296,7 @@ const PaymentsPage: React.FC = () => {
       {/* Filtros */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={6}>
             <Autocomplete
               freeSolo
               options={filterClientOptions}
@@ -319,7 +319,7 @@ const PaymentsPage: React.FC = () => {
               )}
             />
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={12} sm={3}>
             <TextField
               label="Estado"
               name="status"
@@ -335,7 +335,7 @@ const PaymentsPage: React.FC = () => {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={12} sm={3}>
             <TextField
               label="Fecha desde"
               name="from"
@@ -347,7 +347,7 @@ const PaymentsPage: React.FC = () => {
               fullWidth
             />
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={12} sm={3}>
             <TextField
               label="Fecha hasta"
               name="to"
@@ -359,7 +359,7 @@ const PaymentsPage: React.FC = () => {
               fullWidth
             />
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={12} sm={3}>
             <Button variant="outlined" onClick={fetchPayments} sx={{ height: '100%' }}>
               Buscar
             </Button>
