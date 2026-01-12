@@ -2,9 +2,10 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import axios from 'axios';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
-// Configuración global de Axios para el backend con headers anti-cache
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: API_URL,
   withCredentials: true,
   headers: {
     'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -83,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const loginWithGoogle = () => {
-    window.location.href = 'http://localhost:3000/auth/google/redirect';
+    window.location.href = `${API_URL}/auth/google/redirect`;
   };
 
   const logout = async () => {
