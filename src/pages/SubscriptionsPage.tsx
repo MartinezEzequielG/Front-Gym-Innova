@@ -46,9 +46,8 @@ const SubscriptionsPage: React.FC = () => {
   const [form, setForm] = useState({
     clientId: '',
     planId: '',
-    branchId: '', // NUEVO
+    branchId: '',
     startDate: '',
-    endDate: '',
   });
   const location = useLocation();
   const navigate = useNavigate();
@@ -135,7 +134,7 @@ const SubscriptionsPage: React.FC = () => {
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
-    setForm({ clientId: '', planId: '', branchId: '', startDate: '', endDate: '' });
+    setForm({ clientId: '', planId: '', branchId: '', startDate: '', });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -148,9 +147,10 @@ const SubscriptionsPage: React.FC = () => {
       };
 
       await api.post<CreateSubscriptionResponse>('/subscriptions', {
-        ...form,
+        clientId: form.clientId,
+        planId: form.planId,
+        branchId: form.branchId,
         startDate: form.startDate ? new Date(form.startDate).toISOString() : undefined,
-        endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
       });
 
       handleClose();
@@ -336,15 +336,6 @@ const SubscriptionsPage: React.FC = () => {
                 type="date"
                 value={form.startDate}
                 onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Fecha de fin"
-                type="date"
-                value={form.endDate}
-                onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 fullWidth
                 required

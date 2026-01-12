@@ -58,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             color: '#fff',
           }}
         >
-          Innova Sistem Gym
+          Innova System Gym
         </Typography>
         {user && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
