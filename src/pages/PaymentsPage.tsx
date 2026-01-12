@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Autocomplete, Box
+  Typography, Table, TableHead, TableRow, TableCell, TableBody, Paper, Chip,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
+  MenuItem, Autocomplete, Box
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
 import { api } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -62,7 +63,7 @@ const PaymentsPage: React.FC = () => {
 
   // Autocomplete clients
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
-  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearch, setClientSearch] = useState(''); // ahora sí se usa (inputValue)
   const [clientLoading, setClientLoading] = useState(false);
 
   // Modal para crear cliente
@@ -226,20 +227,38 @@ const PaymentsPage: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = {
-        ...form,
+      const { subscriptionId, ...restForm } = form;
+
+      type CreatePaymentPayload = {
+        clientId: string;
+        provider: string;
+        method: string;
+        amount: number;
+        currency?: string;
+        status?: string;
+        notes?: string;
+        receiptUrl?: string;
+        type: 'SUBSCRIPTION';
+        subscriptionId?: string;
+      };
+
+      const payload: CreatePaymentPayload = {
+        ...restForm,
         type: 'SUBSCRIPTION',
         amount: Number(form.amount) || 0,
         currency: form.currency || undefined,
         status: form.status || undefined,
-        method: form.method || undefined,
+        method: form.method || 'CASH',
         notes: form.notes || undefined,
         receiptUrl: form.receiptUrl || undefined,
       };
-      if (!form.subscriptionId || form.subscriptionId.trim() === '') {
-        delete payload.subscriptionId;
+
+      if (subscriptionId && subscriptionId.trim() !== '') {
+        payload.subscriptionId = subscriptionId.trim();
       }
+
       await api.post('/payments', payload);
+
       fetchPayments();
       setOpen(false);
       setForm({
@@ -293,33 +312,43 @@ const PaymentsPage: React.FC = () => {
       <Typography variant="h5" gutterBottom>
         Pagos
       </Typography>
+
       {/* Filtros */}
       <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+        {/* ✅ reemplazo de Grid por Flex responsive */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 2,
+            alignItems: 'stretch',
+          }}
+        >
+          <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
             <Autocomplete
               freeSolo
               options={filterClientOptions}
               loading={filterClientLoading}
-              getOptionLabel={option => typeof option === 'string' ? option : `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}`}
+              getOptionLabel={(option) =>
+                typeof option === 'string'
+                  ? option
+                  : `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}`
+              }
               onInputChange={handleFilterClientInputChange}
               onChange={(_, value) => {
-                setFilters(f => ({
+                setFilters((f) => ({
                   ...f,
-                  email: typeof value === 'string'
-                    ? value
-                    : value?.email || '',
-                  name: typeof value === 'string'
-                    ? value
-                    : value?.name || ''
+                  email: typeof value === 'string' ? value : value?.email || '',
+                  name: typeof value === 'string' ? value : value?.name || '',
                 }));
               }}
-              renderInput={params => (
+              renderInput={(params) => (
                 <TextField {...params} label="Buscar cliente/email/DNI" size="small" />
               )}
             />
-          </Grid>
-          <Grid item xs={12} sm={3}>
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: 'calc(25% - 8px)' } }}>
             <TextField
               label="Estado"
               name="status"
@@ -330,12 +359,15 @@ const PaymentsPage: React.FC = () => {
               fullWidth
             >
               <MenuItem value="">Todos</MenuItem>
-              {paymentStatus.map(s => (
-                <MenuItem key={s} value={s}>{s}</MenuItem>
+              {paymentStatus.map((s) => (
+                <MenuItem key={s} value={s}>
+                  {s}
+                </MenuItem>
               ))}
             </TextField>
-          </Grid>
-          <Grid item xs={12} sm={3}>
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: 'calc(25% - 8px)' } }}>
             <TextField
               label="Fecha desde"
               name="from"
@@ -346,8 +378,9 @@ const PaymentsPage: React.FC = () => {
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
-          </Grid>
-          <Grid item xs={12} sm={3}>
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: 'calc(25% - 8px)' } }}>
             <TextField
               label="Fecha hasta"
               name="to"
@@ -358,14 +391,16 @@ const PaymentsPage: React.FC = () => {
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <Button variant="outlined" onClick={fetchPayments} sx={{ height: '100%' }}>
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: 'calc(25% - 8px)' } }}>
+            <Button variant="outlined" onClick={fetchPayments} sx={{ height: 40, width: '100%' }}>
               Buscar
             </Button>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Box>
+
       <Button variant="contained" sx={{ mb: 2 }} onClick={() => setOpen(true)}>
         Agregar Pago
       </Button>
@@ -441,6 +476,7 @@ const PaymentsPage: React.FC = () => {
             <Autocomplete
               options={clientOptions}
               loading={clientLoading}
+              inputValue={clientSearch}
               getOptionLabel={option => option ? `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}` : ''}
               onInputChange={handleClientInputChange}
               onChange={handleClientChange}

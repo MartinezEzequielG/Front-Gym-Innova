@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 export const LoginSuccessPage = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login } = useAuth() as any;
 
   useEffect(() => {
     const token = params.get("token");

@@ -142,13 +142,19 @@ const SubscriptionsPage: React.FC = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/subscriptions', {
+      type CreateSubscriptionResponse = {
+        id: string;
+        planId: string;
+      };
+
+      await api.post<CreateSubscriptionResponse>('/subscriptions', {
         ...form,
         startDate: form.startDate ? new Date(form.startDate).toISOString() : undefined,
         endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
       });
+
       handleClose();
-      fetchSubs(); // Refresca después de crear
+      fetchSubs();
     } catch {
       alert('Error al crear la suscripción');
     }
@@ -159,14 +165,13 @@ const SubscriptionsPage: React.FC = () => {
   const handleRenew = async (subscription: Subscription) => {
     try {
       // Primero obtener el precio actual del plan
-      const planRes = await api.get(`/plans/${subscription.plan.id}`);
+      const planRes = await api.get<Plan>(`/plans/${subscription.plan.id}`);
       const currentPlan = planRes.data;
       
       // Renovar la suscripción
-      const res = await api.patch(`/subscriptions/${subscription.id}/renew`);
+      const res = await api.patch<Subscription>(`/subscriptions/${subscription.id}/renew`);
       const newSubscription = res.data;
       
-      // Asegurar que la nueva suscripción tenga el precio actualizado del plan
       newSubscription.plan = currentPlan;
       
       // Refrescar el listado
@@ -291,6 +296,7 @@ const SubscriptionsPage: React.FC = () => {
                 options={clientOptions}
                 loading={clientLoading}
                 getOptionLabel={option => option ? `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}` : ''}
+                inputValue={clientSearch}
                 onInputChange={handleClientInputChange}
                 onChange={(_, value) => setForm(f => ({
                   ...f,

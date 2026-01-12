@@ -42,7 +42,11 @@ export function useReceptionCheckin(autoResetMs: number) {
     setClient(null);
 
     try {
-      const res = await api.post('/attendance/quick-checkin', { dni: cleanDni, branchId });
+      type ReceptionCheckinResponse = {
+        client: any;
+      };
+
+      const res = await api.post<ReceptionCheckinResponse>('/attendance/quick-checkin', { dni: cleanDni, branchId });
       const payload = res.data.client;
       setClient(payload);
       setStatus('success');

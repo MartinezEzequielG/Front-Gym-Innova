@@ -61,6 +61,10 @@ type HistoryItem = {
   planName?: string;
 };
 
+type ReceptionCheckinResponse = {
+  client: Client;
+};
+
 // -------------------- helpers --------------------
 
 function formatDateAR(value?: string | Date) {
@@ -255,7 +259,7 @@ const ReceptionPage: React.FC = () => {
     setClient(null);
 
     try {
-      const res = await api.post('/attendance/quick-checkin', {
+      const res = await api.post<ReceptionCheckinResponse>('/attendance/quick-checkin', {
         dni: cleanDni,
         branchId: selectedBranchId,
       });
@@ -331,7 +335,6 @@ const ReceptionPage: React.FC = () => {
   const handleCloseModal = () => {
     resetForm(true);
   };
-
 
   return (
     <Box
@@ -748,3 +751,4 @@ const ReceptionPage: React.FC = () => {
 };
 
 export default ReceptionPage;
+

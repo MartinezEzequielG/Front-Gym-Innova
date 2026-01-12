@@ -10,6 +10,21 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user } = useAuth();
 
+  const safeUser = user as unknown as {
+    name?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
+
+  const displayName =
+    safeUser?.name ??
+    [safeUser?.firstName, safeUser?.lastName].filter(Boolean).join(' ') ??
+    safeUser?.email ??
+    '';
+
+  const initial = displayName ? displayName.charAt(0).toUpperCase() : '';
+
   return (
     <AppBar
       position="fixed"
@@ -48,10 +63,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         {user && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Avatar sx={{ bgcolor: '#fff', color: '#1976d2', width: 40, height: 40, fontWeight: 700 }}>
-              {user.name ? user.name.charAt(0).toUpperCase() : ''}
+              {initial}
             </Avatar>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#fff', fontFamily: 'Montserrat, sans-serif' }}>
-              {user.name || ''}
+              {displayName}
             </Typography>
           </Box>
         )}

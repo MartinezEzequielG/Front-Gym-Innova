@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -72,8 +72,7 @@ export default function QuickRegisterDialog({
 
   useEffect(() => {
     if (open) {
-      // cargar sucursales + planes
-      Promise.all([api.get('/branches'), api.get('/plans')])
+      Promise.all([api.get<Branch[]>('/branches'), api.get<Plan[]>('/plans')])
         .then(([b, p]) => {
           setBranches(b.data);
           setPlans(p.data);
