@@ -2,7 +2,11 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import axios from 'axios';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL;
+
+if (!API_URL) {
+  throw new Error('Missing VITE_API_URL (set it in Amplify env vars)');
+}
 
 export const api = axios.create({
   baseURL: API_URL,
