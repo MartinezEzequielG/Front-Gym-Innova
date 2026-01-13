@@ -99,6 +99,7 @@ export default function QuickRegisterDialog({
   }, [subscriptionData.planId, plans]);
 
   const handleNext = async () => {
+    if (loading) return; // evita doble submit
     setError('');
 
     if (activeStep === 0) {
@@ -148,18 +149,17 @@ export default function QuickRegisterDialog({
 
     setLoading(true);
     try {
-      // provider: si es MP lo marcamos como mercadopago; si no, manual
       const provider = paymentData.method === 'MP' ? 'mercadopago' : 'manual';
 
       await api.post('/clients/quick-register', {
         client: {
           ...clientData,
           dni: String(clientData.dni).trim(),
-          birthDate: clientData.birthDate ? new Date(clientData.birthDate).toISOString() : undefined,
+          birthDate: clientData.birthDate || undefined, // "YYYY-MM-DD"
         },
         planId: plan.id,
         branchId: subscriptionData.branchId,
-        startDate: new Date(subscriptionData.startDate).toISOString(),
+        startDate: subscriptionData.startDate, // "YYYY-MM-DD"
         payment: {
           amount: Number(paymentData.amount),
           method: paymentData.method,
