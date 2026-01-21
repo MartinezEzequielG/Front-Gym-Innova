@@ -37,6 +37,7 @@ const PlansPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
 
   const loadBranches = async () => {
     try {
@@ -76,7 +77,20 @@ const PlansPage: React.FC = () => {
   const handleClose = () => {
     setOpen(false);
     setForm({ name: '', description: '', price: '', durationDays: '', branchId: '' }); 
+    setEditingPlan(null);
     setError('');
+  };
+
+  const handleOpenEdit = (plan: Plan) => {
+    setEditingPlan(plan);
+    setForm({
+      name: plan.name,
+      description: plan.description ?? '',
+      price: String(plan.price),
+      durationDays: String(plan.durationDays),
+      branchId: plan.branchId,
+    });
+    setOpen(true);
   };
 
   const handleSubmit = async () => {
@@ -88,13 +102,20 @@ const PlansPage: React.FC = () => {
         description: form.description,
         price: Number(form.price),
         durationDays: Number(form.durationDays),
-        branchId: form.branchId, // NUEVO
+        branchId: form.branchId,
       };
-      const res = await api.post<Plan>('/plans', payload);
-      setPlans([res.data, ...plans]);
+      if (editingPlan) {
+        // Editar plan existente
+        const res = await api.patch<Plan>(`/plans/${editingPlan.id}`, payload);
+        setPlans(plans.map(p => (p.id === editingPlan.id ? res.data : p)));
+      } else {
+        // Crear nuevo plan
+        const res = await api.post<Plan>('/plans', payload);
+        setPlans([res.data, ...plans]);
+      }
       handleClose();
     } catch {
-      setError('Error al crear el plan.');
+      setError('Error al guardar el plan.');
     }
     setSaving(false);
   };
@@ -144,6 +165,9 @@ const PlansPage: React.FC = () => {
               <TableCell>${plan.price}</TableCell>
               <TableCell>{plan.durationDays}</TableCell>
               <TableCell>
+                <Button color="primary" size="small" onClick={() => handleOpenEdit(plan)}>
+                  Editar
+                </Button>
                 <Button color="error" size="small" onClick={() => handleDelete(plan.id)}>
                   Eliminar
                 </Button>
@@ -153,7 +177,7 @@ const PlansPage: React.FC = () => {
         </TableBody>
       </Table>
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-        <DialogTitle>Crear nuevo plan</DialogTitle>
+        <DialogTitle>{editingPlan ? 'Editar plan' : 'Crear nuevo plan'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <TextField
@@ -197,7 +221,7 @@ const PlansPage: React.FC = () => {
         <DialogActions>
           <Button onClick={handleClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={saving} variant="contained">
-            {saving ? 'Guardando...' : 'Crear'}
+            {saving ? 'Guardando...' : editingPlan ? 'Guardar cambios' : 'Crear'}
           </Button>
         </DialogActions>
       </Dialog>

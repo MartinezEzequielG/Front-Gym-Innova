@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layout } from '../components/Layout';
 import { mdiAccountMultiple, mdiCartOutline, mdiChartTimelineVariant, mdiRefresh } from '@mdi/js';
 import {
   Alert,
@@ -22,6 +21,7 @@ import {
   MenuItem,
   Select,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
@@ -52,7 +52,7 @@ function IconBadge({ path, bg }: { path: string; bg: string }) {
         display: 'grid',
         placeItems: 'center',
         background: bg,
-        boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+        boxShadow: '0 10px 24px rgba(0,0,0,0.10)',
         flex: '0 0 auto',
       }}
     >
@@ -82,18 +82,17 @@ function MetricCard({
     <Paper
       variant="outlined"
       sx={{
-        borderRadius: 3,
-        p: 2.25,
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.78) 100%)',
-        backdropFilter: 'blur(6px)',
+        borderRadius: 4,
+        p: 2.5,
         borderColor: 'rgba(0,0,0,0.08)',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.06)',
-        minHeight: 120,
+        boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+        background:
+          'radial-gradient(900px 160px at 10% 0%, rgba(25,118,210,0.10) 0%, rgba(255,255,255,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88))',
       }}
     >
       <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
         <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 0.2 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: 0.2 }}>
             {title}
           </Typography>
 
@@ -102,7 +101,7 @@ function MetricCard({
             sx={{
               fontWeight: 900,
               lineHeight: 1.05,
-              letterSpacing: -0.6,
+              letterSpacing: -0.7,
             }}
           >
             {loading ? '—' : value}
@@ -114,6 +113,108 @@ function MetricCard({
         </Stack>
 
         <IconBadge path={iconPath} bg={iconBg} />
+      </Stack>
+    </Paper>
+  );
+}
+
+function StatPill({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'error' | 'info';
+}) {
+  const palette = {
+    neutral: { bg: alpha('#111827', 0.06), fg: alpha('#111827', 0.9) },
+    success: { bg: alpha('#10b981', 0.12), fg: '#0f766e' },
+    warning: { bg: alpha('#f59e0b', 0.14), fg: '#b45309' },
+    error: { bg: alpha('#ef4444', 0.12), fg: '#b91c1c' },
+    info: { bg: alpha('#1976d2', 0.12), fg: '#1976d2' },
+  }[tone];
+
+  return (
+    <Box
+      sx={{
+        borderRadius: 2.5,
+        px: 1.25,
+        py: 0.8,
+        backgroundColor: palette.bg,
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 1.25,
+      }}
+    >
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>
+        {label}
+      </Typography>
+      <Typography variant="caption" sx={{ fontWeight: 900, color: palette.fg }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function BranchCard({
+  row,
+  dimmed,
+  nfInt,
+  nfMoney,
+}: {
+  row: ByBranchRow;
+  dimmed?: boolean;
+  nfInt: Intl.NumberFormat;
+  nfMoney: Intl.NumberFormat;
+}) {
+  const pending = row.subscriptionsPendingPayment;
+  const pendingTone = pending > 0 ? 'error' : 'success';
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 4,
+        p: 2.25,
+        borderColor: 'rgba(0,0,0,0.08)',
+        boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+        background:
+          'linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88))',
+        opacity: dimmed ? 0.55 : 1,
+      }}
+    >
+      <Stack spacing={1.25}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1.5}>
+          <Typography sx={{ fontWeight: 900, letterSpacing: -0.2 }} noWrap>
+            {row.branchName}
+          </Typography>
+
+          <Chip
+            size="small"
+            label={`Pend: ${nfInt.format(pending)}`}
+            sx={{
+              borderRadius: 999,
+              fontWeight: 900,
+              backgroundColor: pending > 0 ? alpha('#ef4444', 0.12) : alpha('#10b981', 0.12),
+              color: pending > 0 ? '#b91c1c' : '#0f766e',
+            }}
+          />
+        </Stack>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          <StatPill label="Clientes" value={nfInt.format(row.clientsCount)} tone="neutral" />
+          <StatPill label="Subs. vigentes" value={nfInt.format(row.subscriptionsActive)} tone="info" />
+          <StatPill label="Subs. totales" value={nfInt.format(row.subscriptionsTotal)} tone="neutral" />
+          <StatPill label="Pend. pago" value={nfInt.format(row.subscriptionsPendingPayment)} tone={pendingTone} />
+        </Box>
+
+        <Divider />
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          <StatPill label="Fact. hoy" value={nfMoney.format(row.revenueToday)} tone="info" />
+          <StatPill label="Fact. mes" value={nfMoney.format(row.revenueMonthToDate)} tone="neutral" />
+        </Box>
       </Stack>
     </Paper>
   );
@@ -174,7 +275,7 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ refresca cuando cambia branchId (selección)
+  // ✅ refresca cuando cambia branchId
   useEffect(() => {
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,9 +294,8 @@ export default function DashboardPage() {
   };
 
   return (
-    <Layout>
       <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
-        {/* Header card */}
+        {/* Header card (mismo patrón que Caja) */}
         <Paper
           variant="outlined"
           sx={{
@@ -221,9 +321,10 @@ export default function DashboardPage() {
                     placeItems: 'center',
                     background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
                     boxShadow: '0 10px 24px rgba(25,118,210,0.25)',
+                    flex: '0 0 auto',
                   }}
                 >
-                  <svg width={20} height={20}>
+                  <svg width={20} height={20} aria-hidden="true">
                     <path d={mdiChartTimelineVariant} fill="#fff" />
                   </svg>
                 </Box>
@@ -238,10 +339,10 @@ export default function DashboardPage() {
                     label={selectedBranchName ? `Sucursal: ${selectedBranchName}` : 'Sucursal seleccionada'}
                     sx={{
                       ml: 0.5,
-                      fontWeight: 700,
+                      fontWeight: 900,
                       borderRadius: 999,
-                      backgroundColor: 'rgba(25,118,210,0.10)',
-                      color: 'rgba(25,118,210,1)',
+                      backgroundColor: alpha('#1976d2', 0.12),
+                      color: '#1976d2',
                     }}
                   />
                 ) : (
@@ -250,13 +351,15 @@ export default function DashboardPage() {
                     label="Vista global"
                     sx={{
                       ml: 0.5,
-                      fontWeight: 700,
+                      fontWeight: 900,
                       borderRadius: 999,
-                      backgroundColor: 'rgba(16,185,129,0.10)',
-                      color: 'rgba(16,185,129,1)',
+                      backgroundColor: alpha('#10b981', 0.12),
+                      color: '#0f766e',
                     }}
                   />
                 )}
+
+                {loading && <CircularProgress size={18} />}
               </Stack>
 
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -264,9 +367,9 @@ export default function DashboardPage() {
               </Typography>
             </Stack>
 
-            {/* ✅ Selector de sucursal + recargar */}
+            {/* Selector + recargar (responsive) */}
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} alignItems={{ sm: 'center' }}>
-              <FormControl size="small" sx={{ minWidth: 240 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 240 } }}>
                 <InputLabel id="branch-select-label">Sucursal</InputLabel>
                 <Select
                   labelId="branch-select-label"
@@ -297,13 +400,13 @@ export default function DashboardPage() {
                 sx={{
                   borderRadius: 2.5,
                   textTransform: 'none',
-                  fontWeight: 800,
+                  fontWeight: 900,
                   px: 2,
                   boxShadow: '0 12px 26px rgba(25,118,210,0.22)',
                   whiteSpace: 'nowrap',
                 }}
                 startIcon={
-                  <svg width={18} height={18}>
+                  <svg width={18} height={18} aria-hidden="true">
                     <path d={mdiRefresh} fill="#fff" />
                   </svg>
                 }
@@ -312,31 +415,26 @@ export default function DashboardPage() {
               </Button>
             </Stack>
           </Stack>
+
+          {status === 'error' && (
+            <Alert
+              severity="error"
+              sx={{ mt: 2, borderRadius: 3 }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => fetchDashboard()}
+                  sx={{ textTransform: 'none', fontWeight: 900 }}
+                >
+                  Reintentar
+                </Button>
+              }
+            >
+              No se pudo cargar el dashboard: {error}
+            </Alert>
+          )}
         </Paper>
-
-        {/* Status */}
-        {status === 'loading' && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-            <CircularProgress size={18} />
-            <Typography variant="body2" color="text.secondary">
-              Cargando métricas…
-            </Typography>
-          </Box>
-        )}
-
-        {status === 'error' && (
-          <Alert
-            severity="error"
-            sx={{ mb: 3, borderRadius: 3 }}
-            action={
-              <Button color="inherit" size="small" onClick={() => fetchDashboard()} sx={{ textTransform: 'none', fontWeight: 800 }}>
-                Reintentar
-              </Button>
-            }
-          >
-            No se pudo cargar el dashboard: {error}
-          </Alert>
-        )}
 
         {/* Metric cards */}
         <Box
@@ -373,7 +471,7 @@ export default function DashboardPage() {
           />
         </Box>
 
-        {/* Table section */}
+        {/* Resumen por sucursal */}
         <Paper
           variant="outlined"
           sx={{
@@ -397,90 +495,113 @@ export default function DashboardPage() {
               <Chip
                 size="small"
                 label={`${byBranch.length} sucursal${byBranch.length === 1 ? '' : 'es'}`}
-                sx={{ borderRadius: 999, fontWeight: 800 }}
+                sx={{ borderRadius: 999, fontWeight: 900 }}
               />
             </Stack>
           </Box>
 
           <Divider />
 
-          <TableContainer sx={{ maxHeight: 520 }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Clientes
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Subs. vigentes
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Subs. totales
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Pend. pago
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Fact. hoy
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                    Fact. mes
-                  </TableCell>
-                </TableRow>
-              </TableHead>
+          {/* MOBILE: cards */}
+          <Box sx={{ display: { xs: 'block', md: 'none' }, p: 2 }}>
+            <Stack spacing={1.5}>
+              {!loading && byBranch.length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                  No hay información para mostrar.
+                </Typography>
+              )}
 
-              <TableBody>
-                {!loading && byBranch.length === 0 && (
+              {byBranch.map((r) => (
+                <BranchCard
+                  key={r.branchId}
+                  row={r}
+                  nfInt={nfInt}
+                  nfMoney={nfMoney}
+                  dimmed={Boolean(branchId) && branchId !== r.branchId}
+                />
+              ))}
+            </Stack>
+          </Box>
+
+          {/* DESKTOP: table */}
+          <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+            <TableContainer sx={{ maxHeight: 520 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={7} sx={{ py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No hay información para mostrar.
-                      </Typography>
+                    <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Clientes
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Subs. vigentes
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Subs. totales
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Pend. pago
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Fact. hoy
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                      Fact. mes
                     </TableCell>
                   </TableRow>
-                )}
+                </TableHead>
 
-                {byBranch.map((r, idx) => (
-                  <TableRow
-                    key={r.branchId}
-                    hover
-                    sx={{
-                      '& td': { borderBottomColor: 'rgba(0,0,0,0.06)' },
-                      backgroundColor: idx % 2 === 0 ? 'rgba(0,0,0,0.012)' : 'transparent',
-                      opacity: branchId && branchId !== r.branchId ? 0.55 : 1,
-                    }}
-                  >
-                    <TableCell sx={{ fontWeight: 800 }}>{r.branchName}</TableCell>
-                    <TableCell align="right">{nfInt.format(r.clientsCount)}</TableCell>
-                    <TableCell align="right">{nfInt.format(r.subscriptionsActive)}</TableCell>
-                    <TableCell align="right">{nfInt.format(r.subscriptionsTotal)}</TableCell>
-                    <TableCell align="right">
-                      <Chip
-                        size="small"
-                        label={nfInt.format(r.subscriptionsPendingPayment)}
-                        sx={{
-                          borderRadius: 999,
-                          fontWeight: 900,
-                          backgroundColor:
-                            r.subscriptionsPendingPayment > 0 ? 'rgba(239,68,68,0.10)' : 'rgba(16,185,129,0.10)',
-                          color: r.subscriptionsPendingPayment > 0 ? 'rgba(239,68,68,1)' : 'rgba(16,185,129,1)',
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>
-                      {nfMoney.format(r.revenueToday)}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>
-                      {nfMoney.format(r.revenueMonthToDate)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                <TableBody>
+                  {!loading && byBranch.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} sx={{ py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No hay información para mostrar.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+
+                  {byBranch.map((r, idx) => (
+                    <TableRow
+                      key={r.branchId}
+                      hover
+                      sx={{
+                        '& td': { borderBottomColor: 'rgba(0,0,0,0.06)' },
+                        backgroundColor: idx % 2 === 0 ? 'rgba(0,0,0,0.012)' : 'transparent',
+                        opacity: branchId && branchId !== r.branchId ? 0.55 : 1,
+                      }}
+                    >
+                      <TableCell sx={{ fontWeight: 900 }}>{r.branchName}</TableCell>
+                      <TableCell align="right">{nfInt.format(r.clientsCount)}</TableCell>
+                      <TableCell align="right">{nfInt.format(r.subscriptionsActive)}</TableCell>
+                      <TableCell align="right">{nfInt.format(r.subscriptionsTotal)}</TableCell>
+                      <TableCell align="right">
+                        <Chip
+                          size="small"
+                          label={nfInt.format(r.subscriptionsPendingPayment)}
+                          sx={{
+                            borderRadius: 999,
+                            fontWeight: 900,
+                            backgroundColor:
+                              r.subscriptionsPendingPayment > 0 ? alpha('#ef4444', 0.12) : alpha('#10b981', 0.12),
+                            color: r.subscriptionsPendingPayment > 0 ? '#b91c1c' : '#0f766e',
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 900 }}>
+                        {nfMoney.format(r.revenueToday)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 900 }}>
+                        {nfMoney.format(r.revenueMonthToDate)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         </Paper>
       </Box>
-    </Layout>
   );
 }

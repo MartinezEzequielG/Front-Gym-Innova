@@ -33,16 +33,19 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (
-      error.response?.status === 401 &&
-      window.location.pathname !== '/login'
-    ) {
+    const status = error.response?.status;
+    const url = String(error.config?.url ?? '');
+
+    // No forzar redirect si el 401 viene de /auth/me
+    const isMeEndpoint = url.includes('/auth/me');
+
+    if (status === 401 && !isMeEndpoint && window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
+
     return Promise.reject(error);
   }
 );
-
 interface User {
   id: string;
   email: string;

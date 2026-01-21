@@ -14,6 +14,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import BusinessIcon from '@mui/icons-material/Business';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,7 @@ const navItems = [
   { label: 'Panel', icon: <DashboardIcon />, path: '/dashboard' },
   { label: 'Socios', icon: <PeopleIcon />, path: '/members' },
   { label: 'Pagos', icon: <PaymentIcon />, path: '/payments' },
+  { label: 'Caja', icon: <PointOfSaleIcon />, path: '/cash' },
   { label: 'Suscripciones', icon: <SubscriptionsIcon />, path: '/subscriptions' },
   { label: 'Planes', icon: <FitnessCenterIcon />, path: '/plans' },
   { label: 'Sucursales', icon: <BusinessIcon />, path: '/branches' },
@@ -46,7 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
 
   const handleNavigate = (path: string) => {
     navigate(path);
-    handleDrawerToggle();
+    // cerrar solo si está abierto el drawer mobile
+    if (mobileOpen) handleDrawerToggle();
   };
 
   const drawerContent = (
@@ -95,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
               }}
               selected={location.pathname === item.path}
             >
-              <ListItemIcon sx={{ color: 'inherit', minWidth: 0, justifyContent: 'center' }}>
+              <ListItemIcon sx={{ color: 'inherit', minWidth: 40, justifyContent: 'center' }}>
                 {item.icon}
               </ListItemIcon>
               <ListItemText primary={item.label} />
@@ -112,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
               px: 3,
             }}
           >
-            <ListItemIcon sx={{ color: 'inherit', minWidth: 0, justifyContent: 'center' }}>
+            <ListItemIcon sx={{ color: 'inherit', minWidth: 40, justifyContent: 'center' }}>
               <MeetingRoomIcon />
             </ListItemIcon>
             <ListItemText primary="Recepción" />

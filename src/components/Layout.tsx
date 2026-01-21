@@ -16,7 +16,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <CssBaseline />
       <Header onMenuClick={handleDrawerToggle} />
       <Sidebar mobileOpen={mobileOpen} handleDrawerToggle={handleDrawerToggle} />
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 0 }}>
         <Toolbar />
         {children}
         <Footer />

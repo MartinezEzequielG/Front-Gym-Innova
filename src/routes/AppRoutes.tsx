@@ -13,10 +13,22 @@ import SubscriptionsPage from '../pages/SubscriptionsPage';
 import PlansPage from '../pages/PlansPage';
 import ReceptionPage from '../pages/ReceptionPage';
 import BranchesPage from '../pages/BranchesPage';
+import CashPage from '../pages/CashPage';
+
+import { Box, CircularProgress } from '@mui/material';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
-  return user ? <Layout>{children}</Layout> : <Navigate to="/login" />;
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return user ? <Layout>{children}</Layout> : <Navigate to="/login" replace />;
 };
 
 export const AppRoutes = () => (
@@ -44,6 +56,14 @@ export const AppRoutes = () => (
       element={
         <PrivateRoute>
           <MembersPage />
+        </PrivateRoute>
+      }
+    />
+    <Route
+      path="/cash"
+      element={
+        <PrivateRoute>
+          <CashPage />
         </PrivateRoute>
       }
     />
