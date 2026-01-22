@@ -107,13 +107,6 @@ function statusMeta(status?: string) {
   }
 }
 
-function maskDni(dni?: string) {
-  if (!dni) return '';
-  const s = String(dni);
-  if (s.length <= 3) return `***${s}`;
-  return `***${s.slice(-3)}`;
-}
-
 function initials(name?: string) {
   if (!name) return 'CL';
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -666,7 +659,18 @@ const ReceptionPage: React.FC = () => {
                   {!!client.dni && (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>DNI</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{isKiosk ? maskDni(client.dni) : client.dni}</Typography>
+                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
+                        {client.dni}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {!!client.name && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Nombre</Typography>
+                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
+                        {client.name}
+                      </Typography>
                     </Box>
                   )}
 

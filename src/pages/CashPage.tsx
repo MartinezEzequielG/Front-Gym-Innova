@@ -165,6 +165,8 @@ export default function CashPage() {
       headers: { Accept: 'application/json' },
     });
 
+    const text = await res.text();
+
     if (res.status === 404) {
       setCash(null);
       setExpected(null);
@@ -172,13 +174,9 @@ export default function CashPage() {
       return;
     }
     if (!res.ok) {
-      // Intenta leer texto, pero no parsees JSON si no hay
-      const text = await res.text();
       throw new Error(text || 'Error al obtener la caja');
     }
 
-    // Solo parsea JSON si hay contenido
-    const text = await res.text();
     if (!text) {
       setCash(null);
       setExpected(null);
