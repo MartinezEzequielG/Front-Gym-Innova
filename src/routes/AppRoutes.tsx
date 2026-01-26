@@ -13,7 +13,7 @@ import SubscriptionsPage from '../pages/SubscriptionsPage';
 import PlansPage from '../pages/PlansPage';
 import ReceptionPage from '../pages/ReceptionPage';
 import BranchesPage from '../pages/BranchesPage';
-import CashPage from '../pages/CashPage';
+import CashPage from '../pages/cash/CashPage';
 
 import { Box, CircularProgress } from '@mui/material';
 

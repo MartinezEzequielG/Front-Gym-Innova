@@ -28,6 +28,7 @@ import {
   DialogActions,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import CloseSummaryDialog from './components/CloseSummaryDialog';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
@@ -87,6 +88,36 @@ type CashHistoryRow = {
   diffSum: number;
 };
 
+// --------- RESUMEN POST-CIERRE ----------
+type MoneyByMethod = { CASH: number; CARD: number; TRANSFER: number; OTHER: number };
+type CloseResult = {
+  cash: CashRegister;
+  expected: MoneyByMethod;
+  counted: MoneyByMethod;
+  difference: MoneyByMethod;
+};
+// --------------------------------------
+
+// --------- MOVIMIENTOS (Paso 4) - Tipos y helpers ----------
+const MOVEMENT_TYPES = ['INCOME', 'EXPENSE', 'ADJUSTMENT'] as const;
+type MovementType = (typeof MOVEMENT_TYPES)[number];
+
+const MOVEMENT_METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER'] as const;
+type MovementMethod = (typeof MOVEMENT_METHODS)[number];
+
+function movementTypeLabel(t: MovementType) {
+  if (t === 'INCOME') return 'Ingreso';
+  if (t === 'EXPENSE') return 'Egreso';
+  return 'Ajuste';
+}
+
+function movementTypeChipColor(t: MovementType): 'success' | 'warning' | 'info' {
+  if (t === 'INCOME') return 'success';
+  if (t === 'EXPENSE') return 'warning';
+  return 'info';
+}
+// -----------------------------------------------------------
+
 function nfMoney(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(
     Number.isFinite(n) ? n : 0,
@@ -121,6 +152,11 @@ function rowSecondary(item: LedgerItem) {
   return item.description ?? '—';
 }
 
+function normalizeMoneyInput(raw: string): string {
+  if (!raw) return '';
+  return raw.replace(/^0+(?=\d)/, '');
+}
+
 export default function CashPage() {
   const apiBase = useMemo(() => String((import.meta as any).env?.VITE_API_URL ?? '').replace(/\/$/, ''), []);
 
@@ -142,15 +178,15 @@ export default function CashPage() {
   const [ledger, setLedger] = useState<LedgerResponse | null>(null);
 
   // Inputs: apertura/cierre
-  const [openCash, setOpenCash] = useState(0);
-  const [openCard, setOpenCard] = useState(0);
-  const [openTransfer, setOpenTransfer] = useState(0);
-  const [openOther, setOpenOther] = useState(0);
+  const [openCash, setOpenCash] = useState('');
+  const [openCard, setOpenCard] = useState('');
+  const [openTransfer, setOpenTransfer] = useState('');
+  const [openOther, setOpenOther] = useState('');
 
-  const [countCash, setCountCash] = useState(0);
-  const [countCard, setCountCard] = useState(0);
-  const [countTransfer, setCountTransfer] = useState(0);
-  const [countOther, setCountOther] = useState(0);
+  const [countCash, setCountCash] = useState('');
+  const [countCard, setCountCard] = useState('');
+  const [countTransfer, setCountTransfer] = useState('');
+  const [countOther, setCountOther] = useState('');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -178,6 +214,99 @@ export default function CashPage() {
   const [histDetailLedger, setHistDetailLedger] = useState<LedgerResponse | null>(null);
   const [histDetailLoading, setHistDetailLoading] = useState(false);
   const [histDetailError, setHistDetailError] = useState('');
+
+  // --------- PASO 4: dialog alta movimiento ----------
+  const [movOpen, setMovOpen] = useState(false);
+  const [movSubmitting, setMovSubmitting] = useState(false);
+  const [movError, setMovError] = useState<string>('');
+  const [movType, setMovType] = useState<MovementType>('INCOME');
+  const [movMethod, setMovMethod] = useState<MovementMethod>('CASH');
+  const [movAmount, setMovAmount] = useState<number>(0);
+  const [movDesc, setMovDesc] = useState<string>('');
+
+  const openMovementDialog = (preset?: MovementType) => {
+    if (!cash?.id || cash.status !== 'OPEN') {
+      setError('No hay una caja abierta para registrar movimientos.');
+      setTab(0);
+      return;
+    }
+    setMovError('');
+    setMovType(preset ?? 'INCOME');
+    setMovMethod('CASH');
+    setMovAmount(0);
+    setMovDesc('');
+    setMovOpen(true);
+  };
+
+  const closeMovementDialog = () => {
+    if (movSubmitting) return;
+    setMovOpen(false);
+    setMovError('');
+  };
+
+  const validateMovement = () => {
+    if (!cash?.id || cash.status !== 'OPEN') return 'No hay caja abierta.';
+    const amt = toNumber(movAmount);
+    if (!(amt > 0)) return 'El monto debe ser mayor a 0.';
+    if ((movType === 'EXPENSE' || movType === 'ADJUSTMENT') && movDesc.trim().length < 3) {
+      return 'La descripción es obligatoria (mínimo 3 caracteres) para egresos/ajustes.';
+    }
+    if (movDesc.trim().length > 140) return 'La descripción es demasiado larga (máx. 140).';
+    return '';
+  };
+
+  const submitMovement = async () => {
+    const v = validateMovement();
+    if (v) {
+      setMovError(v);
+      return;
+    }
+    if (!cash?.id) return;
+
+    setMovSubmitting(true);
+    setMovError('');
+    setStatus('loading');
+    setError(null);
+
+    try {
+      const res = await fetch(`${apiBase}/cash/${cash.id}/movements`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          type: movType,
+          method: movMethod,
+          amount: toNumber(movAmount),
+          description: movDesc.trim() ? movDesc.trim() : undefined,
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      // Refrescamos expected + ledger (y caja) consistentemente
+      await fetchOpen(branchId);
+
+      setMovOpen(false);
+      setMovSubmitting(false);
+      setStatus('success');
+
+      // Llevar al usuario al libro para ver el asiento recién creado
+      setTab(2);
+    } catch (e) {
+      setMovSubmitting(false);
+      setStatus('error');
+      const msg = e instanceof Error ? e.message : 'Error desconocido';
+      setMovError(msg);
+      setError(msg);
+    }
+  };
+  // ---------------------------------------------------
+
+  // --------- RESUMEN POST-CIERRE ----------
+  const [closeSummaryOpen, setCloseSummaryOpen] = useState(false);
+  const [closeSummary, setCloseSummary] = useState<CloseResult | null>(null);
+  const closeSummaryClose = () => setCloseSummaryOpen(false);
+  // ---------------------------------------
 
   const loading = status === 'loading';
   const isOpen = cash?.status === 'OPEN';
@@ -294,6 +423,12 @@ export default function CashPage() {
     setBranchId(bid);
     localStorage.setItem('lastSelectedBranch', bid);
 
+    // recomendado: limpiar contados al cambiar sucursal (evita confusión)
+    setCountCash('');
+    setCountCard('');
+    setCountTransfer('');
+    setCountOther('');
+
     setStatus('loading');
     setError(null);
     try {
@@ -337,10 +472,16 @@ export default function CashPage() {
       if (!res.ok) throw new Error(await res.text());
       await fetchOpen(branchId);
 
-      setOpenCash(0);
-      setOpenCard(0);
-      setOpenTransfer(0);
-      setOpenOther(0);
+      setOpenCash('');
+      setOpenCard('');
+      setOpenTransfer('');
+      setOpenOther('');
+
+      // recomendado: limpiar contados al abrir
+      setCountCash('');
+      setCountCard('');
+      setCountTransfer('');
+      setCountOther('');
 
       setStatus('success');
     } catch (e) {
@@ -369,8 +510,26 @@ export default function CashPage() {
         }),
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || 'Error al cerrar caja');
+
+      const json = text ? (JSON.parse(text) as CloseResult) : null;
+
+      if (json) {
+        setCloseSummary(json);
+        setCloseSummaryOpen(true);
+      } else {
+        setCloseSummary(null);
+        setCloseSummaryOpen(true);
+      }
+
       await fetchOpen(branchId);
+
+      // recomendado: limpiar contados luego del cierre
+      setCountCash('');
+      setCountCard('');
+      setCountTransfer('');
+      setCountOther('');
 
       setStatus('success');
     } catch (e) {
@@ -508,17 +667,11 @@ export default function CashPage() {
               />
               <Chip
                 label={
-                  selectedBranchName
-                    ? `Sucursal: ${selectedBranchName}`
-                    : hasBranch
-                      ? 'Sucursal seleccionada'
-                      : 'Sin sucursal'
+                  selectedBranchName ? `Sucursal: ${selectedBranchName}` : hasBranch ? 'Sucursal seleccionada' : 'Sin sucursal'
                 }
                 sx={{ fontWeight: 900, borderRadius: 999 }}
               />
-              {!!cash?.businessDate && (
-                <Chip label={`Día: ${nfDateOnly(cash.businessDate)}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
-              )}
+              {!!cash?.businessDate && <Chip label={`Día: ${nfDateOnly(cash.businessDate)}`} sx={{ fontWeight: 900, borderRadius: 999 }} />}
               {loading && <CircularProgress size={18} />}
             </Stack>
           </Stack>
@@ -589,9 +742,7 @@ export default function CashPage() {
                     {isOpen ? 'Cerrar caja' : 'Abrir caja'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {isOpen
-                      ? 'Ingresá lo contado y confirmá el cierre.'
-                      : 'Ingresá el efectivo inicial y confirmá la apertura.'}
+                    {isOpen ? 'Ingresá lo contado y confirmá el cierre.' : 'Ingresá el efectivo inicial y confirmá la apertura.'}
                   </Typography>
 
                   <Divider sx={{ mb: 2 }} />
@@ -605,10 +756,11 @@ export default function CashPage() {
                     <Stack spacing={1.5} sx={{ mt: 1 }}>
                       <TextField
                         label="Efectivo inicial"
-                        type="number"
+                        type="text"
                         value={openCash}
-                        onChange={(e) => setOpenCash(toNumber(e.target.value))}
-                        inputProps={{ min: 0, step: 100 }}
+                        onChange={(e) => setOpenCash(e.target.value.replace(/[^\d]/g, ''))}
+                        onBlur={() => setOpenCash(normalizeMoneyInput(openCash))}
+                        inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
                         fullWidth
                       />
 
@@ -624,21 +776,21 @@ export default function CashPage() {
                             label="Tarjeta"
                             type="number"
                             value={openCard}
-                            onChange={(e) => setOpenCard(toNumber(e.target.value))}
+                            onChange={(e) => setCountCard(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                           <TextField
                             label="Transferencia"
                             type="number"
                             value={openTransfer}
-                            onChange={(e) => setOpenTransfer(toNumber(e.target.value))}
+                            onChange={(e) => setCountTransfer(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                           <TextField
                             label="Otros"
                             type="number"
                             value={openOther}
-                            onChange={(e) => setOpenOther(toNumber(e.target.value))}
+                            onChange={(e) => setCountOther(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                         </Box>
@@ -657,10 +809,10 @@ export default function CashPage() {
                     <Stack spacing={1.5} sx={{ mt: 1 }}>
                       <TextField
                         label="Efectivo contado"
-                        type="number"
+                        type="text"
                         value={countCash}
-                        onChange={(e) => setCountCash(toNumber(e.target.value))}
-                        inputProps={{ min: 0, step: 100 }}
+                        onChange={(e) => setCountCash(e.target.value.replace(/[^\d]/g, ''))}
+                        inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
                         fullWidth
                       />
 
@@ -676,21 +828,21 @@ export default function CashPage() {
                             label="Tarjeta contada"
                             type="number"
                             value={countCard}
-                            onChange={(e) => setCountCard(toNumber(e.target.value))}
+                            onChange={(e) => setCountCard(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                           <TextField
                             label="Transferencia contada"
                             type="number"
                             value={countTransfer}
-                            onChange={(e) => setCountTransfer(toNumber(e.target.value))}
+                            onChange={(e) => setCountTransfer(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                           <TextField
                             label="Otros contados"
                             type="number"
                             value={countOther}
-                            onChange={(e) => setCountOther(toNumber(e.target.value))}
+                            onChange={(e) => setCountOther(e.target.value.replace(/[^\d]/g, ''))}
                             inputProps={{ min: 0, step: 100 }}
                           />
                         </Box>
@@ -818,7 +970,11 @@ export default function CashPage() {
                             fontWeight: 900,
                             borderRadius: 999,
                             backgroundColor:
-                              diff === 0 ? alpha('#10b981', 0.12) : diff > 0 ? alpha('#f59e0b', 0.14) : alpha('#ef4444', 0.12),
+                              diff === 0
+                                ? alpha('#10b981', 0.12)
+                                : diff > 0
+                                  ? alpha('#f59e0b', 0.14)
+                                  : alpha('#ef4444', 0.12),
                             color: diff === 0 ? '#0f766e' : diff > 0 ? '#b45309' : '#b91c1c',
                           }}
                         />
@@ -894,8 +1050,35 @@ export default function CashPage() {
                   </Typography>
                 </Box>
 
-                <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
-                  <TextField size="small" label="Buscar" value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} sx={{ minWidth: { sm: 260 } }} />
+                <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} sx={{ flexWrap: 'wrap' }}>
+                  {/* Acciones rápidas (Paso 4) */}
+                  <Button
+                    variant="contained"
+                    disabled={!isOpen || loading}
+                    onClick={() => openMovementDialog('INCOME')}
+                    sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+                  >
+                    + Ingreso
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    disabled={!isOpen || loading}
+                    onClick={() => openMovementDialog('EXPENSE')}
+                    sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+                  >
+                    + Egreso
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    disabled={!isOpen || loading}
+                    onClick={() => openMovementDialog('ADJUSTMENT')}
+                    sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+                  >
+                    Ajuste
+                  </Button>
+
+                  <TextField size="small" label="Buscar" value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} sx={{ minWidth: { sm: 240 } }} />
                   <TextField
                     size="small"
                     select
@@ -1329,6 +1512,100 @@ export default function CashPage() {
           )}
         </Box>
       </Paper>
+
+      {/* MODAL: ALTA MOVIMIENTO (Paso 4) */}
+      <Dialog open={movOpen} onClose={closeMovementDialog} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ fontWeight: 900 }}>Registrar movimiento</DialogTitle>
+
+        <DialogContent dividers>
+          {!isOpen && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              No hay caja abierta. Abrí una caja para registrar movimientos.
+            </Alert>
+          )}
+
+          {movError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {movError}
+            </Alert>
+          )}
+
+          <Stack spacing={1.25}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
+              <TextField select label="Tipo" value={movType} onChange={(e) => setMovType(e.target.value as MovementType)} fullWidth>
+                {MOVEMENT_TYPES.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {movementTypeLabel(t)}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField select label="Método" value={movMethod} onChange={(e) => setMovMethod(e.target.value as MovementMethod)} fullWidth>
+                {MOVEMENT_METHODS.map((m) => (
+                  <MenuItem key={m} value={m}>
+                    {m}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            <TextField
+              label="Monto"
+              type="number"
+              value={movAmount}
+              onChange={(e) => setMovAmount(toNumber(e.target.value))}
+              inputProps={{ min: 0, step: 100 }}
+              helperText="Debe ser mayor a 0"
+              fullWidth
+            />
+
+            <TextField
+              label="Descripción"
+              value={movDesc}
+              onChange={(e) => setMovDesc(e.target.value)}
+              placeholder={movType === 'EXPENSE' ? 'Ej: Compra de insumos, retiro, etc.' : 'Opcional'}
+              fullWidth
+              multiline
+              minRows={2}
+              helperText={movType === 'EXPENSE' || movType === 'ADJUSTMENT' ? 'Obligatoria para egresos/ajustes (auditoría).' : 'Opcional para ingresos.'}
+            />
+
+            <Stack direction="row" gap={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+              <Chip label={movementTypeLabel(movType)} color={movementTypeChipColor(movType)} sx={{ fontWeight: 900, borderRadius: 999 }} />
+              <Chip label={movMethod} sx={{ fontWeight: 900, borderRadius: 999 }} />
+              <Chip label={nfMoney(toNumber(movAmount))} sx={{ fontWeight: 900, borderRadius: 999 }} />
+            </Stack>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={closeMovementDialog} disabled={movSubmitting} sx={{ textTransform: 'none', fontWeight: 900 }}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={submitMovement}
+            disabled={movSubmitting || !isOpen}
+            variant="contained"
+            sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
+          >
+            {movSubmitting ? 'Guardando…' : 'Confirmar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* MODAL: RESUMEN POST-CIERRE */}
+      <CloseSummaryDialog
+        open={closeSummaryOpen}
+        onClose={closeSummaryClose}
+        summary={closeSummary}
+        branchName={selectedBranchName}
+        nfMoney={nfMoney}
+        nfDate={nfDate}
+        nfDateOnly={nfDateOnly}
+        ledgerStats={ledgerStats}
+        fallbackBusinessDate={cash?.businessDate}
+        fallbackOpenedAt={cash?.openedAt}
+      />
     </Box>
   );
 }
