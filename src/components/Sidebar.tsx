@@ -115,11 +115,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
   const drawerContent = (
     <Box
       sx={{
-        height: '100%',
+        height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         bgcolor: '#111',
         color: alpha('#fff', 0.92),
+        overflow: 'hidden', // clave: el scroll va en el contenedor interno
       }}
     >
       {/* Top / Brand area */}
@@ -128,6 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
           px: collapsed ? 1 : 2,
           gap: 1,
           justifyContent: collapsed ? 'center' : 'space-between',
+          flexShrink: 0,
         }}
       >
         {!collapsed && (
@@ -158,113 +160,138 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
         </Tooltip>
       </Toolbar>
 
-      <Divider sx={{ borderColor: alpha('#FFD600', 0.18) }} />
+      <Divider sx={{ borderColor: alpha('#FFD600', 0.18), flexShrink: 0 }} />
 
-      {/* Nav */}
-      <List sx={{ flexGrow: 1, py: 1 }}>
-        {navItems.map(item => {
-          const active = isActive(item.path);
-          const button = (
-            <ListItemButton
-              onClick={() => handleNavigate(item.path)}
-              selected={active}
-              sx={{
-                ...itemSx,
-                ...(active ? selectedSx : null),
-              }}
-            >
-              <ListItemIcon sx={{ color: active ? '#FFD600' : alpha('#fff', 0.82) }}>
-                {item.icon}
-              </ListItemIcon>
-
-              {!collapsed && (
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{ noWrap: true, sx: { fontWeight: active ? 900 : 700 } }}
-                />
-              )}
-            </ListItemButton>
-          );
-
-          return (
-            <ListItem key={item.label} disablePadding sx={{ display: 'block' }}>
-              {collapsed ? (
-                <Tooltip title={item.label} placement="right">
-                  {button}
-                </Tooltip>
-              ) : (
-                button
-              )}
-            </ListItem>
-          );
-        })}
-
-        {/* Recepción */}
-        <ListItem disablePadding sx={{ display: 'block', mt: 0.5 }}>
-          {collapsed ? (
-            <Tooltip title="Recepción" placement="right">
+      {/* ✅ SCROLL AREA: nav + recepción */}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0, // importantísimo para que overflow funcione en flex
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          py: 1,
+          '&::-webkit-scrollbar': { width: 8 },
+          '&::-webkit-scrollbar-thumb': {
+            bgcolor: alpha('#FFD600', 0.25),
+            borderRadius: 8,
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            bgcolor: alpha('#FFD600', 0.35),
+          },
+        }}
+      >
+        <List sx={{ py: 0 }}>
+          {navItems.map(item => {
+            const active = isActive(item.path);
+            const button = (
               <ListItemButton
-                onClick={() => {
-                  // En modo rail, más UX abrir directo la pestaña
-                  window.open(`${window.location.origin}/reception`, '_blank', 'noopener,noreferrer');
+                onClick={() => handleNavigate(item.path)}
+                selected={active}
+                sx={{
+                  ...itemSx,
+                  ...(active ? selectedSx : null),
                 }}
-                sx={itemSx}
               >
-                <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
-                  <MeetingRoomIcon />
+                <ListItemIcon sx={{ color: active ? '#FFD600' : alpha('#fff', 0.82) }}>
+                  {item.icon}
                 </ListItemIcon>
+
+                {!collapsed && (
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{ noWrap: true, sx: { fontWeight: active ? 900 : 700 } }}
+                  />
+                )}
               </ListItemButton>
-            </Tooltip>
-          ) : (
-            <>
-              <ListItemButton onClick={() => setReceptionOpen(v => !v)} sx={itemSx}>
-                <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
-                  <MeetingRoomIcon />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Recepción"
-                  primaryTypographyProps={{ sx: { fontWeight: 800 } }}
-                />
-                {receptionOpen ? <ExpandLess /> : <ExpandMore />}
-              </ListItemButton>
+            );
 
-              <Collapse in={receptionOpen} timeout="auto" unmountOnExit>
-                <List component="div" disablePadding sx={{ mt: 0.25 }}>
-                  <ListItem disablePadding sx={{ display: 'block' }}>
-                    <ListItemButton
-                      sx={{
-                        ...itemSx,
-                        ml: 2,
-                        mr: 1,
-                        backgroundColor: alpha('#fff', 0.04),
-                        '&:hover': { backgroundColor: alpha('#FFD600', 0.10) },
-                      }}
-                      onClick={e => {
-                        e.stopPropagation();
-                        window.open(`${window.location.origin}/reception`, '_blank', 'noopener,noreferrer');
-                        if (mobileOpen) handleDrawerToggle();
-                      }}
-                    >
-                      <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
-                        <OpenInNewIcon fontSize="small" />
-                      </ListItemIcon>
-                      <ListItemText primary="Abrir Recepción en nueva pestaña" />
-                    </ListItemButton>
-                  </ListItem>
-                </List>
-              </Collapse>
-            </>
-          )}
-        </ListItem>
-      </List>
+            return (
+              <ListItem key={item.label} disablePadding sx={{ display: 'block' }}>
+                {collapsed ? (
+                  <Tooltip title={item.label} placement="right">
+                    {button}
+                  </Tooltip>
+                ) : (
+                  button
+                )}
+              </ListItem>
+            );
+          })}
 
-      {/* Bottom actions */}
-      <Box sx={{ px: 1, pb: 1 }}>
-        <Divider sx={{ borderColor: alpha('#FFD600', 0.18), mb: 1 }} />
+          {/* Recepción */}
+          <ListItem disablePadding sx={{ display: 'block', mt: 0.5 }}>
+            {collapsed ? (
+              <Tooltip title="Recepción" placement="right">
+                <ListItemButton
+                  onClick={() => {
+                    // En modo rail, más UX abrir directo la pestaña
+                    window.open(`${window.location.origin}/reception`, '_blank', 'noopener,noreferrer');
+                  }}
+                  sx={itemSx}
+                >
+                  <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
+                    <MeetingRoomIcon />
+                  </ListItemIcon>
+                </ListItemButton>
+              </Tooltip>
+            ) : (
+              <>
+                <ListItemButton onClick={() => setReceptionOpen(v => !v)} sx={itemSx}>
+                  <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
+                    <MeetingRoomIcon />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Recepción"
+                    primaryTypographyProps={{ sx: { fontWeight: 800 } }}
+                  />
+                  {receptionOpen ? <ExpandLess /> : <ExpandMore />}
+                </ListItemButton>
 
+                <Collapse in={receptionOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding sx={{ mt: 0.25 }}>
+                    <ListItem disablePadding sx={{ display: 'block' }}>
+                      <ListItemButton
+                        sx={{
+                          ...itemSx,
+                          ml: 2,
+                          mr: 1,
+                          backgroundColor: alpha('#fff', 0.04),
+                          '&:hover': { backgroundColor: alpha('#FFD600', 0.10) },
+                        }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          window.open(`${window.location.origin}/reception`, '_blank', 'noopener,noreferrer');
+                          if (mobileOpen) handleDrawerToggle();
+                        }}
+                      >
+                        <ListItemIcon sx={{ color: alpha('#fff', 0.82) }}>
+                          <OpenInNewIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText primary="Abrir Recepción en nueva pestaña" />
+                      </ListItemButton>
+                    </ListItem>
+                  </List>
+                </Collapse>
+              </>
+            )}
+          </ListItem>
+        </List>
+      </Box>
+
+      {/* ✅ BOTTOM ACTIONS: siempre visible */}
+      <Box
+        sx={{
+          flexShrink: 0,
+          px: 1,
+          pb: 1,
+          pt: 1,
+          borderTop: `1px solid ${alpha('#FFD600', 0.14)}`,
+          backgroundColor: alpha('#111', 0.98),
+        }}
+      >
         <List disablePadding>
           <ListItem disablePadding sx={{ display: 'block' }}>
-            {(collapsed ? (
+            {collapsed ? (
               <Tooltip title="Cerrar sesión" placement="right">
                 <ListItemButton
                   onClick={logout}
@@ -293,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, handleDrawerToggle
                 </ListItemIcon>
                 <ListItemText primary="Cerrar sesión" primaryTypographyProps={{ sx: { fontWeight: 800 } }} />
               </ListItemButton>
-            )) as any}
+            )}
           </ListItem>
         </List>
       </Box>
