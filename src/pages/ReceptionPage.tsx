@@ -332,7 +332,16 @@ const ReceptionPage: React.FC = () => {
   return (
     <Box
       sx={{
+        // Fallback universal
+        minHeight: '100vh',
         height: '100vh',
+
+        // ✅ Si el navegador soporta dvh, lo usamos (evita bugs en multi-monitor/zoom)
+        '@supports (height: 100dvh)': {
+          minHeight: '100dvh',
+          height: '100dvh',
+        },
+
         width: '100vw',
         overflow: 'hidden',
         position: 'relative',
