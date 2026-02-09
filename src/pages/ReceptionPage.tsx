@@ -607,6 +607,7 @@ const ReceptionPage: React.FC = () => {
         onClose={handleCloseModal}
         maxWidth="md"
         fullWidth
+        keepMounted
         PaperProps={{
           sx: {
             bgcolor: 'rgba(0,0,0,0.95)',
@@ -632,131 +633,142 @@ const ReceptionPage: React.FC = () => {
         </IconButton>
 
         <DialogContent sx={{ p: 5 }}>
-          {/* Error state */}
-          {status === 'error' && (
-            <Fade in timeout={300}>
-              <Box sx={{ textAlign: 'center' }}>
-                <CancelIcon sx={{ fontSize: 140, color: '#f44336', mb: 2 }} />
-                <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 42, mb: 2 }}>ACCESO DENEGADO</Typography>
-                <Alert severity="error" sx={{ bgcolor: 'rgba(244,67,54,0.20)', color: '#fff', border: '1px solid rgba(244,67,54,0.40)', fontSize: 18 }}>
-                  {error}
-                </Alert>
-              </Box>
-            </Fade>
-          )}
+          {/* Error state (no condicional wrapper) */}
+          <Fade in={status === 'error'} timeout={300} mountOnEnter unmountOnExit>
+            <Box sx={{ textAlign: 'center' }}>
+              <CancelIcon sx={{ fontSize: 140, color: '#f44336', mb: 2 }} />
+              <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 42, mb: 2 }}>ACCESO DENEGADO</Typography>
+              <Alert
+                severity="error"
+                sx={{
+                  bgcolor: 'rgba(244,67,54,0.20)',
+                  color: '#fff',
+                  border: '1px solid rgba(244,67,54,0.40)',
+                  fontSize: 18,
+                }}
+              >
+                {error}
+              </Alert>
+            </Box>
+          </Fade>
 
-          {/* Success state */}
-          {status === 'success' && client && (
-            <Fade in timeout={300}>
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-                  <Box sx={{ color: meta.color }}>{meta.icon}</Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 42, lineHeight: 1 }}>
-                      {client.subscriptionStatus === 'VIGENTE' ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO'}
-                    </Typography>
-                    <Typography sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 900, fontSize: 24, mt: 1 }}>
-                      {isKiosk ? `Cliente ${initials(client.name)}` : client.name || 'Cliente'}
-                    </Typography>
-                    <Chip label={meta.label} sx={{ bgcolor: meta.color, color: '#fff', fontWeight: 950, mt: 2, fontSize: 16, px: 2, py: 1 }} />
+          {/* Success state (no condicional wrapper) */}
+          <Fade in={status === 'success' && Boolean(client)} timeout={300} mountOnEnter unmountOnExit>
+            <Box>
+              {client && (
+                <>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
+                    <Box sx={{ color: meta.color }}>{meta.icon}</Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 42, lineHeight: 1 }}>
+                        {client.subscriptionStatus === 'VIGENTE' ? 'ACCESO PERMITIDO' : 'ACCESO DENEGADO'}
+                      </Typography>
+                      <Typography sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 900, fontSize: 24, mt: 1 }}>
+                        {isKiosk ? `Cliente ${initials(client.name)}` : client.name || 'Cliente'}
+                      </Typography>
+                      <Chip
+                        label={meta.label}
+                        sx={{ bgcolor: meta.color, color: '#fff', fontWeight: 950, mt: 2, fontSize: 16, px: 2, py: 1 }}
+                      />
+                    </Box>
                   </Box>
-                </Box>
 
-                <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 3 }} />
+                  <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 3 }} />
 
-                <Stack spacing={2}>
-                  {!!client.dni && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>DNI</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
-                        {client.dni}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {!!client.name && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Nombre</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
-                        {client.name}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {!isKiosk && !!client.email && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Email</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{client.email}</Typography>
-                    </Box>
-                  )}
-
-                  {!isKiosk && !!client.subscription?.branchName && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Sucursal</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{client.subscription.branchName}</Typography>
-                    </Box>
-                  )}
-
-                  {!isKiosk && !!client.subscription?.planName && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Plan</Typography>
-                      <Typography sx={{ color: '#FFD600', fontWeight: 950, fontSize: 18 }}>{client.subscription.planName}</Typography>
-                    </Box>
-                  )}
-
-                  {!!client.subscription?.endDate && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Vencimiento</Typography>
-                      <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{formatDateAR(client.subscription.endDate)}</Typography>
-                    </Box>
-                  )}
-
-                  {client.subscriptionStatus === 'VIGENTE' && remainingDays != null && (
-                    <>
-                      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 2 }} />
-                      <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontWeight: 900, fontSize: 14 }}>Días restantes</Typography>
-                          <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 36 }}>
-                            {remainingDays} día{remainingDays === 1 ? '' : 's'}
-                          </Typography>
-                        </Box>
-                        {remainingText && (
-                          <Typography sx={{ color: remainingDays <= 7 ? '#ff9800' : '#9ccc65', fontWeight: 900, fontSize: 14, textAlign: 'right' }}>
-                            {remainingText}
-                          </Typography>
-                        )}
-                        {urgencyBar && (
-                          <LinearProgress
-                            variant="determinate"
-                            value={urgencyBar.value}
-                            sx={{
-                              mt: 2,
-                              height: 14,
-                              borderRadius: 99,
-                              bgcolor: 'rgba(255,255,255,0.08)',
-                              '& .MuiLinearProgress-bar': { bgcolor: urgencyBar.barColor },
-                            }}
-                          />
-                        )}
+                  <Stack spacing={2}>
+                    {!!client.dni && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>DNI</Typography>
+                        <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
+                          {client.dni}
+                        </Typography>
                       </Box>
-                    </>
-                  )}
-                </Stack>
+                    )}
 
-                {client.subscriptionStatus !== 'VIGENTE' && (
-                  <Alert severity="warning" sx={{ mt: 3, bgcolor: 'rgba(255,152,0,0.20)', border: '1px solid rgba(255,152,0,0.40)' }}>
-                    <Typography sx={{ fontWeight: 900, fontSize: 16 }}>
-                      Estado: <b>{client.subscriptionStatus}</b>
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      Regularizar en administración.
-                    </Typography>
-                  </Alert>
-                )}
-              </Box>
-            </Fade>
-          )}
+                    {!!client.name && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Nombre</Typography>
+                        <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>
+                          {client.name}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {!isKiosk && !!client.email && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Email</Typography>
+                        <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{client.email}</Typography>
+                      </Box>
+                    )}
+
+                    {!isKiosk && !!client.subscription?.branchName && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Sucursal</Typography>
+                        <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{client.subscription.branchName}</Typography>
+                      </Box>
+                    )}
+
+                    {!isKiosk && !!client.subscription?.planName && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Plan</Typography>
+                        <Typography sx={{ color: '#FFD600', fontWeight: 950, fontSize: 18 }}>{client.subscription.planName}</Typography>
+                      </Box>
+                    )}
+
+                    {!!client.subscription?.endDate && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontWeight: 900, fontSize: 16 }}>Vencimiento</Typography>
+                        <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 18 }}>{formatDateAR(client.subscription.endDate)}</Typography>
+                      </Box>
+                    )}
+
+                    {client.subscriptionStatus === 'VIGENTE' && remainingDays != null && (
+                      <>
+                        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 2 }} />
+                        <Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                            <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontWeight: 900, fontSize: 14 }}>Días restantes</Typography>
+                            <Typography sx={{ color: '#fff', fontWeight: 950, fontSize: 36 }}>
+                              {remainingDays} día{remainingDays === 1 ? '' : 's'}
+                            </Typography>
+                          </Box>
+                          {remainingText && (
+                            <Typography sx={{ color: remainingDays <= 7 ? '#ff9800' : '#9ccc65', fontWeight: 900, fontSize: 14, textAlign: 'right' }}>
+                              {remainingText}
+                            </Typography>
+                          )}
+                          {urgencyBar && (
+                            <LinearProgress
+                              variant="determinate"
+                              value={urgencyBar.value}
+                              sx={{
+                                mt: 2,
+                                height: 14,
+                                borderRadius: 99,
+                                bgcolor: 'rgba(255,255,255,0.08)',
+                                '& .MuiLinearProgress-bar': { bgcolor: urgencyBar.barColor },
+                              }}
+                            />
+                          )}
+                        </Box>
+                      </>
+                    )}
+                  </Stack>
+
+                  {client.subscriptionStatus !== 'VIGENTE' && (
+                    <Alert severity="warning" sx={{ mt: 3, bgcolor: 'rgba(255,152,0,0.20)', border: '1px solid rgba(255,152,0,0.40)' }}>
+                      <Typography sx={{ fontWeight: 900, fontSize: 16 }}>
+                        Estado: <b>{client.subscriptionStatus}</b>
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        Regularizar en administración.
+                      </Typography>
+                    </Alert>
+                  )}
+                </>
+              )}
+            </Box>
+          </Fade>
         </DialogContent>
       </Dialog>
     </Box>
