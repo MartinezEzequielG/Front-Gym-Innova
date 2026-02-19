@@ -149,16 +149,8 @@ function SubscriptionCard({
         </Box>
 
         <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-          <Chip
-            size="small"
-            label={`Inicio: ${isoToYmd(sub.startDate)}`}
-            sx={{ borderRadius: 999, fontWeight: 900 }}
-          />
-          <Chip
-            size="small"
-            label={`Fin: ${isoToYmd(sub.endDate)}`}
-            sx={{ borderRadius: 999, fontWeight: 900 }}
-          />
+          <Chip size="small" label={`Inicio: ${isoToYmd(sub.startDate)}`} sx={{ borderRadius: 999, fontWeight: 900 }} />
+          <Chip size="small" label={`Fin: ${isoToYmd(sub.endDate)}`} sx={{ borderRadius: 999, fontWeight: 900 }} />
         </Stack>
 
         {sub.status === 'VENCIDA' ? (
@@ -213,10 +205,13 @@ export default function SubscriptionsPage() {
     branchId: '',
   });
 
-  const [renewingId] = useState<string>(''); // solo el getter, si lo usás en JSX
+  // ✅ FIX: renewingId debe tener setter
+  const [renewingId, setRenewingId] = useState<string>('');
 
+  // ✅ FIX: guardar subId, y renovar por ID (no por clientId)
   const [renewModal, setRenewModal] = useState<{
     open: boolean;
+    subId: string;
     clientId: string;
     branchId: string;
     currentPlanId: string;
@@ -253,8 +248,6 @@ export default function SubscriptionsPage() {
     setStatus('loading');
     setError('');
     try {
-      // si tu backend acepta filtros server-side, los podés mandar acá.
-      // Por ahora, replico tu enfoque: filtros client-side
       const res = await api.get<Subscription[]>('/subscriptions', {
         params: { _t: Date.now() },
         headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0' },
@@ -354,15 +347,20 @@ export default function SubscriptionsPage() {
   };
 
   const handleRenew = async (sub: Subscription) => {
+    setRenewingId(sub.id);
+
     setRenewModal({
       open: true,
+      subId: sub.id, // ✅ clave para renovar por ID
       clientId: sub.client.id,
       branchId: sub.branchId,
       currentPlanId: sub.plan.id,
     });
+
     setRenewPlanId(sub.plan.id);
     setRenewLoading(true);
     setRenewError('');
+
     try {
       const res = await api.get<Plan[]>(`/plans/by-branch/${sub.branchId}`);
       setRenewPlans(res.data);
@@ -376,20 +374,21 @@ export default function SubscriptionsPage() {
 
   const confirmRenew = async () => {
     if (!renewModal || !renewPlanId) return;
+
     setRenewLoading(true);
     setRenewError('');
+
     try {
-      await api.post('/subscriptions/renew-for-client', {
-        clientId: renewModal.clientId,
-        branchId: renewModal.branchId,
-        planId: renewPlanId,
-      });
+      // ✅ usando tu controller actual: PATCH /subscriptions/:id/renew con planId
+      await api.patch(`/subscriptions/${renewModal.subId}/renew`, { planId: renewPlanId });
+
       setRenewModal(null);
       await fetchSubs();
     } catch (e: any) {
       setRenewError(e?.response?.data?.message || 'Error al renovar suscripción.');
     } finally {
       setRenewLoading(false);
+      setRenewingId('');
     }
   };
 
@@ -594,12 +593,7 @@ export default function SubscriptionsPage() {
           )}
 
           {filtered.map((s) => (
-            <SubscriptionCard
-              key={s.id}
-              sub={s}
-              onRenew={handleRenew}
-              renewing={renewingId === s.id}
-            />
+            <SubscriptionCard key={s.id} sub={s} onRenew={handleRenew} renewing={renewingId === s.id} />
           ))}
         </Stack>
       </Box>
@@ -801,7 +795,15 @@ export default function SubscriptionsPage() {
 
       {/* Modal renovar suscripción */}
       {renewModal && (
-        <Dialog open={renewModal.open} onClose={() => setRenewModal(null)} fullWidth maxWidth="sm">
+        <Dialog
+          open={renewModal.open}
+          onClose={() => {
+            setRenewModal(null);
+            setRenewingId('');
+          }}
+          fullWidth
+          maxWidth="sm"
+        >
           <DialogTitle sx={{ fontWeight: 900 }}>Renovar suscripción</DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {renewError && <Alert severity="error">{renewError}</Alert>}
@@ -809,11 +811,11 @@ export default function SubscriptionsPage() {
               select
               label="Plan"
               value={renewPlanId}
-              onChange={e => setRenewPlanId(e.target.value)}
+              onChange={(e) => setRenewPlanId(e.target.value)}
               fullWidth
               disabled={renewLoading}
             >
-              {renewPlans.map(plan => (
+              {renewPlans.map((plan) => (
                 <MenuItem key={plan.id} value={plan.id}>
                   {plan.name}
                 </MenuItem>
@@ -821,12 +823,16 @@ export default function SubscriptionsPage() {
             </TextField>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setRenewModal(null)} disabled={renewLoading}>Cancelar</Button>
             <Button
-              onClick={confirmRenew}
-              variant="contained"
-              disabled={!renewPlanId || renewLoading}
+              onClick={() => {
+                setRenewModal(null);
+                setRenewingId('');
+              }}
+              disabled={renewLoading}
             >
+              Cancelar
+            </Button>
+            <Button onClick={confirmRenew} variant="contained" disabled={!renewPlanId || renewLoading}>
               Renovar
             </Button>
           </DialogActions>
