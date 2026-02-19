@@ -27,7 +27,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import { alpha } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -64,6 +64,7 @@ interface Branch {
 }
 
 const subStatuses = ['VIGENTE', 'VENCIDA', 'PENDIENTE_PAGO', 'CANCELADA'] as const;
+const paymentMethods = ['CASH', 'CARD', 'TRANSFER', 'MP'] as const;
 
 function nfDate(iso: string) {
   const d = new Date(iso);
@@ -161,7 +162,7 @@ function SubscriptionCard({
             disabled={renewing}
             sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5, alignSelf: 'flex-start' }}
           >
-            {renewing ? 'Renovando…' : 'Renovar'}
+            {renewing ? 'Cargando…' : 'Renovar'}
           </Button>
         ) : (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -180,7 +181,7 @@ export default function SubscriptionsPage() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [open, setOpen] = useState(false);
 
-  // form
+  // form create
   const [form, setForm] = useState({
     clientId: '',
     branchId: '',
@@ -192,7 +193,7 @@ export default function SubscriptionsPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
 
-  // autocomplete
+  // autocomplete create
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [clientLoading, setClientLoading] = useState(false);
@@ -205,10 +206,10 @@ export default function SubscriptionsPage() {
     branchId: '',
   });
 
-  // ✅ FIX: renewingId debe tener setter
+  // ✅ FIX: renewingId con setter
   const [renewingId, setRenewingId] = useState<string>('');
 
-  // ✅ FIX: guardar subId, y renovar por ID (no por clientId)
+  // ✅ FIX: renovar por subId (no por clientId)
   const [renewModal, setRenewModal] = useState<{
     open: boolean;
     subId: string;
@@ -222,7 +223,12 @@ export default function SubscriptionsPage() {
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewError, setRenewError] = useState('');
 
+  // pago en renovación (opcional si vos lo querés acá)
+  const [renewPaymentMethod, setRenewPaymentMethod] = useState<(typeof paymentMethods)[number]>('CASH');
+  const [renewPaymentAmount, setRenewPaymentAmount] = useState<string>('');
+
   const location = useLocation();
+  const navigate = useNavigate();
 
   const loading = status === 'loading';
 
@@ -348,25 +354,37 @@ export default function SubscriptionsPage() {
 
   const handleRenew = async (sub: Subscription) => {
     setRenewingId(sub.id);
+    setRenewError('');
+    setRenewLoading(true);
 
     setRenewModal({
       open: true,
-      subId: sub.id, // ✅ clave para renovar por ID
+      subId: sub.id,
       clientId: sub.client.id,
       branchId: sub.branchId,
       currentPlanId: sub.plan.id,
     });
 
+    // default plan = plan actual
     setRenewPlanId(sub.plan.id);
-    setRenewLoading(true);
-    setRenewError('');
 
     try {
       const res = await api.get<Plan[]>(`/plans/by-branch/${sub.branchId}`);
-      setRenewPlans(res.data);
+      const list = res.data || [];
+      setRenewPlans(list);
+
+      // setear monto por precio del plan seleccionado (si existe)
+      const initialPlan = list.find((p) => p.id === sub.plan.id) ?? list[0];
+      if (initialPlan) {
+        setRenewPlanId(initialPlan.id);
+        setRenewPaymentAmount(initialPlan.price != null ? String(initialPlan.price) : '');
+      } else {
+        setRenewPaymentAmount('');
+      }
     } catch {
       setRenewPlans([]);
       setRenewError('No se pudieron cargar los planes.');
+      setRenewPaymentAmount('');
     } finally {
       setRenewLoading(false);
     }
@@ -379,16 +397,43 @@ export default function SubscriptionsPage() {
     setRenewError('');
 
     try {
-      // ✅ usando tu controller actual: PATCH /subscriptions/:id/renew con planId
-      await api.patch(`/subscriptions/${renewModal.subId}/renew`, { planId: renewPlanId });
+      // 1) renovar (backend devuelve la NUEVA suscripción creada)
+      const res = await api.patch<Subscription>(`/subscriptions/${renewModal.subId}/renew`, { planId: renewPlanId });
+      const newSub = res.data;
+
+      // 2) crear pago asociado a la nueva suscripción (aprobado)
+      const amountNum = Number(renewPaymentAmount);
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        throw new Error('El monto del pago es inválido.');
+      }
+
+      await api.post('/payments', {
+        clientId: renewModal.clientId,
+        subscriptionId: newSub.id,
+        amount: amountNum,
+        method: renewPaymentMethod,
+        provider: 'manual',
+        status: 'APPROVED',
+        type: 'SUBSCRIPTION',
+        currency: 'ARS',
+      });
 
       setRenewModal(null);
+      setRenewPlans([]);
+      setRenewPlanId('');
+      setRenewPaymentAmount('');
+      setRenewPaymentMethod('CASH');
+      setRenewingId('');
+
       await fetchSubs();
+
+      // por si querés refrescar / payments luego
+      navigate('/subscriptions', { replace: true });
     } catch (e: any) {
-      setRenewError(e?.response?.data?.message || 'Error al renovar suscripción.');
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Error al renovar suscripción.';
+      setRenewError(String(msg));
     } finally {
       setRenewLoading(false);
-      setRenewingId('');
     }
   };
 
@@ -421,7 +466,7 @@ export default function SubscriptionsPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
-      {/* Header estilo Caja/Dashboard */}
+      {/* Header */}
       <Paper
         variant="outlined"
         sx={{
@@ -434,12 +479,7 @@ export default function SubscriptionsPage() {
             'radial-gradient(1200px 200px at 10% 0%, rgba(25,118,210,0.14) 0%, rgba(255,255,255,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
         }}
       >
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          alignItems={{ md: 'center' }}
-          justifyContent="space-between"
-          gap={2}
-        >
+        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} justifyContent="space-between" gap={2}>
           <Stack spacing={0.5} sx={{ minWidth: 0 }}>
             <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: -0.4 }}>
               Suscripciones
@@ -573,7 +613,7 @@ export default function SubscriptionsPage() {
         </Alert>
       )}
 
-      {/* MOBILE: Cards */}
+      {/* MOBILE */}
       <Box sx={{ display: { xs: 'block', md: 'none' } }}>
         <Stack spacing={1.5}>
           {!loading && filtered.length === 0 && (
@@ -598,7 +638,7 @@ export default function SubscriptionsPage() {
         </Stack>
       </Box>
 
-      {/* DESKTOP: Table */}
+      {/* DESKTOP */}
       <Paper
         variant="outlined"
         sx={{
@@ -666,7 +706,7 @@ export default function SubscriptionsPage() {
                         disabled={renewingId === s.id}
                         sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
                       >
-                        {renewingId === s.id ? 'Renovando…' : 'Renovar'}
+                        {renewingId === s.id ? 'Cargando…' : 'Renovar'}
                       </Button>
                     ) : (
                       '—'
@@ -807,11 +847,17 @@ export default function SubscriptionsPage() {
           <DialogTitle sx={{ fontWeight: 900 }}>Renovar suscripción</DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {renewError && <Alert severity="error">{renewError}</Alert>}
+
             <TextField
               select
               label="Plan"
               value={renewPlanId}
-              onChange={(e) => setRenewPlanId(e.target.value)}
+              onChange={(e) => {
+                const nextPlanId = e.target.value;
+                setRenewPlanId(nextPlanId);
+                const plan = renewPlans.find((p) => p.id === nextPlanId);
+                setRenewPaymentAmount(plan?.price != null ? String(plan.price) : '');
+              }}
               fullWidth
               disabled={renewLoading}
             >
@@ -821,7 +867,34 @@ export default function SubscriptionsPage() {
                 </MenuItem>
               ))}
             </TextField>
+
+            <TextField
+              label="Monto"
+              value={renewPaymentAmount}
+              InputProps={{ readOnly: true }}
+              fullWidth
+            />
+
+            <TextField
+              select
+              label="Método de pago"
+              value={renewPaymentMethod}
+              onChange={(e) => setRenewPaymentMethod(e.target.value as any)}
+              fullWidth
+              disabled={renewLoading}
+            >
+              {paymentMethods.map((m) => (
+                <MenuItem key={m} value={m}>
+                  {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'TRANSFER' ? 'Transferencia' : 'Mercado Pago'}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Esto crea una nueva suscripción y registra el pago aprobado asociado.
+            </Typography>
           </DialogContent>
+
           <DialogActions>
             <Button
               onClick={() => {
@@ -829,11 +902,17 @@ export default function SubscriptionsPage() {
                 setRenewingId('');
               }}
               disabled={renewLoading}
+              sx={{ textTransform: 'none', fontWeight: 900 }}
             >
               Cancelar
             </Button>
-            <Button onClick={confirmRenew} variant="contained" disabled={!renewPlanId || renewLoading}>
-              Renovar
+            <Button
+              onClick={confirmRenew}
+              variant="contained"
+              disabled={!renewPlanId || renewLoading || !renewPaymentAmount || Number(renewPaymentAmount) <= 0}
+              sx={{ textTransform: 'none', fontWeight: 900 }}
+            >
+              {renewLoading ? 'Renovando…' : 'Renovar'}
             </Button>
           </DialogActions>
         </Dialog>

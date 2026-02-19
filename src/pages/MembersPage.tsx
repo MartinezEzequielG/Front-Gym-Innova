@@ -20,6 +20,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   TextField,
   Typography,
   useMediaQuery,
@@ -42,11 +43,26 @@ interface Client {
   createdAt?: string;
   updatedAt?: string;
   subscriptionStatus?: string;
+  subscriptionEnd?: string | null;
 }
 
-const statusOptions = ['activo', 'inactivo'] as const;
-
 type Status = 'idle' | 'loading' | 'success' | 'error';
+
+type ClientsResponse = {
+  items: Client[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+    q?: string;
+    branchId?: string;
+  };
+};
+
+const statusOptions = ['activo', 'inactivo'] as const;
 
 function nfDateShort(iso?: string) {
   if (!iso) return '—';
@@ -192,10 +208,6 @@ function ClientCard({
   );
 }
 
-/**
- * Tablet row compacta (sm..md)
- * Muestra lo esencial sin perder información: chips + línea de datos.
- */
 function ClientRow({
   client,
   onDelete,
@@ -234,7 +246,11 @@ function ClientRow({
             <SubChip status={client.subscriptionStatus} />
             <StatusChip status={client.status} />
             {client.birthDate && (
-              <Chip size="small" label={`Nac: ${nfDateShort(client.birthDate)}`} sx={{ borderRadius: 999, fontWeight: 900 }} />
+              <Chip
+                size="small"
+                label={`Nac: ${nfDateShort(client.birthDate)}`}
+                sx={{ borderRadius: 999, fontWeight: 900 }}
+              />
             )}
           </Stack>
         </Box>
@@ -269,6 +285,11 @@ function ClientRow({
   );
 }
 
+function clampLimit(n: number) {
+  if (!Number.isFinite(n)) return 20;
+  return Math.min(100, Math.max(1, Math.floor(n)));
+}
+
 const MembersPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // xs
@@ -293,10 +314,23 @@ const MembersPage: React.FC = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // filters
+  // filters (UI)
   const [q, setQ] = useState('');
   const [subFilter, setSubFilter] = useState<string>(''); // '', 'VIGENTE', 'PENDIENTE_PAGO', 'VENCIDA'
   const [statusFilter, setStatusFilter] = useState<string>(''); // '', 'activo', 'inactivo'
+
+  // server pagination
+  const [page, setPage] = useState(1); // 1-based
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // debounce para q
+  const [qDebounced, setQDebounced] = useState(q);
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q), 350);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const [form, setForm] = useState({
     name: '',
@@ -313,40 +347,43 @@ const MembersPage: React.FC = () => {
 
   const loading = status === 'loading';
 
-  const loadClients = async () => {
+  const loadClients = async (opts?: { resetPage?: boolean }) => {
+    const nextPage = opts?.resetPage ? 1 : page;
+
     setStatus('loading');
     setError('');
+
     try {
-      const res = await api.get<Client[]>('/clients');
-      setClients(res.data);
+      const res = await api.get<ClientsResponse>('/clients', {
+        params: {
+          page: nextPage,
+          limit: clampLimit(limit),
+          q: qDebounced?.trim() ? qDebounced.trim() : undefined,
+        },
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0' },
+      });
+
+      setClients(res.data.items || []);
+      setTotal(res.data.meta?.total ?? 0);
+      setTotalPages(res.data.meta?.totalPages ?? 1);
+
+      if (opts?.resetPage) setPage(1);
+
       setStatus('success');
     } catch {
       setStatus('error');
       setError('Error cargando clientes.');
+      setClients([]);
+      setTotal(0);
+      setTotalPages(1);
     }
   };
 
+  // carga inicial + cuando cambia qDebounced, page o limit
   useEffect(() => {
     loadClients();
-  }, []);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-
-    return clients.filter((c) => {
-      const matchesQ =
-        !needle ||
-        c.name?.toLowerCase().includes(needle) ||
-        c.email?.toLowerCase().includes(needle) ||
-        c.dni?.toLowerCase().includes(needle) ||
-        c.phone?.toLowerCase().includes(needle);
-
-      const matchesSub = !subFilter || c.subscriptionStatus === subFilter;
-      const matchesStatus = !statusFilter || c.status === statusFilter;
-
-      return matchesQ && matchesSub && matchesStatus;
-    });
-  }, [clients, q, subFilter, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit, qDebounced]);
 
   const handleOpenEdit = (client: Client) => {
     setEditingClient(client);
@@ -390,16 +427,17 @@ const MembersPage: React.FC = () => {
       };
 
       if (editingClient) {
-        const res = await api.patch<Client>(`/clients/${editingClient.id}`, payload);
-        setClients((prev) => prev.map((c) => (c.id === editingClient.id ? res.data : c)));
+        await api.patch<Client>(`/clients/${editingClient.id}`, payload);
       } else {
-        const res = await api.post<Client>('/clients', payload);
-        setClients((prev) => [res.data, ...prev]);
+        await api.post<Client>('/clients', payload);
       }
 
       setOpenCreate(false);
       setForm({ name: '', email: '', dni: '', phone: '', birthDate: '', address: '', status: '', notes: '' });
       setEditingClient(null);
+
+      // ✅ refrescar desde server (no intentar mutar lista local, porque ahora es paginado)
+      await loadClients({ resetPage: !editingClient });
     } catch (err: any) {
       if (err?.response?.data?.message?.includes('dni')) setError('Ya existe un cliente con ese DNI.');
       else setError('Error al guardar el cliente.');
@@ -408,17 +446,18 @@ const MembersPage: React.FC = () => {
     }
   };
 
-  // Eliminar cliente (con confirmación)
-  const requestDelete = (id: string) => setDeleteId(id);
-
   const confirmDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
     setError('');
     try {
       await api.delete(`/clients/${deleteId}`);
-      setClients((prev) => prev.filter((c) => c.id !== deleteId));
       setDeleteId(null);
+
+      // refrescar y, si era el último de la página, retroceder una página si corresponde
+      const isLastOnPage = clients.length === 1 && page > 1;
+      if (isLastOnPage) setPage((p) => Math.max(1, p - 1));
+      else await loadClients();
     } catch {
       setError('Error al eliminar cliente.');
     } finally {
@@ -428,10 +467,36 @@ const MembersPage: React.FC = () => {
 
   const selectedDelete = useMemo(() => clients.find((c) => c.id === deleteId) ?? null, [clients, deleteId]);
 
-  // stats
-  const total = clients.length;
-  const vigente = clients.filter((c) => c.subscriptionStatus === 'VIGENTE').length;
-  const pend = clients.filter((c) => c.subscriptionStatus === 'PENDIENTE_PAGO').length;
+  /**
+   * ⚠️ Los filtros Sub/Estado ahora filtran SOLO lo que vino en esta página.
+   * Si querés filtro global real, se implementa en backend y se envía como params.
+   */
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+
+    return clients.filter((c) => {
+      // Q server-side (qDebounced) ya filtra, esto es un “extra” local por si querés mantenerlo igual
+      const matchesQ =
+        !needle ||
+        c.name?.toLowerCase().includes(needle) ||
+        c.email?.toLowerCase().includes(needle) ||
+        c.dni?.toLowerCase().includes(needle) ||
+        c.phone?.toLowerCase().includes(needle);
+
+      const matchesSub = !subFilter || c.subscriptionStatus === subFilter;
+      const matchesStatus = !statusFilter || c.status === statusFilter;
+
+      return matchesQ && matchesSub && matchesStatus;
+    });
+  }, [clients, q, subFilter, statusFilter]);
+
+  // stats (sobre la página actual para ser consistentes con paginado)
+  const totalOnPage = filtered.length;
+  const vigenteOnPage = filtered.filter((c) => c.subscriptionStatus === 'VIGENTE').length;
+  const pendOnPage = filtered.filter((c) => c.subscriptionStatus === 'PENDIENTE_PAGO').length;
+
+  const goPrev = () => setPage((p) => Math.max(1, p - 1));
+  const goNext = () => setPage((p) => Math.min(totalPages, p + 1));
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
@@ -460,15 +525,23 @@ const MembersPage: React.FC = () => {
             <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
               <Chip label={`Total: ${total}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
               <Chip
-                label={`Vigentes: ${vigente}`}
+                label={`En página: ${totalOnPage}`}
+                sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#111827', 0.06) }}
+              />
+              <Chip
+                label={`Vigentes: ${vigenteOnPage}`}
                 sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
               />
               <Chip
-                label={`Pendientes: ${pend}`}
+                label={`Pendientes: ${pendOnPage}`}
                 sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#f59e0b', 0.14), color: '#b45309' }}
               />
               {loading && <CircularProgress size={18} />}
             </Stack>
+
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Página {page} de {totalPages}
+            </Typography>
           </Stack>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} alignItems={{ sm: 'center' }}>
@@ -490,9 +563,32 @@ const MembersPage: React.FC = () => {
               Alta rápida
             </Button>
 
-            <Button onClick={loadClients} disabled={loading} sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}>
+            <Button
+              onClick={() => loadClients()}
+              disabled={loading}
+              sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+            >
               Actualizar
             </Button>
+
+            <Stack direction="row" gap={1}>
+              <Button
+                variant="outlined"
+                onClick={goPrev}
+                disabled={loading || page <= 1}
+                sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+              >
+                ◀
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={goNext}
+                disabled={loading || page >= totalPages}
+                sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+              >
+                ▶
+              </Button>
+            </Stack>
           </Stack>
         </Stack>
 
@@ -519,7 +615,10 @@ const MembersPage: React.FC = () => {
             label="Buscar"
             placeholder="Nombre, email, DNI o teléfono…"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1); // ✅ al buscar, reset page
+            }}
             size="small"
             fullWidth
           />
@@ -558,8 +657,26 @@ const MembersPage: React.FC = () => {
             ))}
           </TextField>
 
+          <TextField
+            select
+            label="Filas"
+            value={limit}
+            onChange={(e) => {
+              setLimit(clampLimit(Number(e.target.value)));
+              setPage(1);
+            }}
+            size="small"
+            sx={{ minWidth: { xs: '100%', md: 140 } }}
+          >
+            {[10, 20, 50, 100].map((n) => (
+              <MenuItem key={n} value={n}>
+                {n}
+              </MenuItem>
+            ))}
+          </TextField>
+
           <Chip
-            label={`${filtered.length} resultado${filtered.length === 1 ? '' : 's'}`}
+            label={`${filtered.length} resultado${filtered.length === 1 ? '' : 's'} (página)`}
             sx={{ borderRadius: 999, fontWeight: 900, alignSelf: { xs: 'flex-start', md: 'center' } }}
           />
         </Stack>
@@ -589,7 +706,7 @@ const MembersPage: React.FC = () => {
             <ClientCard
               key={c.id}
               client={c}
-              onDelete={requestDelete}
+              onDelete={(id) => setDeleteId(id)}
               deleting={deleting}
               onEdit={handleOpenEdit}
               onView={handleView}
@@ -605,7 +722,7 @@ const MembersPage: React.FC = () => {
             <ClientRow
               key={c.id}
               client={c}
-              onDelete={requestDelete}
+              onDelete={(id) => setDeleteId(id)}
               deleting={deleting}
               onEdit={handleOpenEdit}
               onView={handleView}
@@ -633,8 +750,8 @@ const MembersPage: React.FC = () => {
                   <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Email</TableCell>
                   <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>DNI</TableCell>
                   <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Teléfono</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Nacimiento</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Estado</TableCell>
+                  {/* <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Nacimiento</TableCell> */}
+                  {/* <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Estado</TableCell> */}
                   <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Suscripción</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>
                     Acciones
@@ -653,15 +770,15 @@ const MembersPage: React.FC = () => {
                     }}
                   >
                     <TableCell sx={{ fontWeight: 900 }}>{client.name}</TableCell>
-                    <TableCell>{client.email}</TableCell>
+                    <TableCell>{client.email || '—'}</TableCell>
                     <TableCell sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
                       {client.dni}
                     </TableCell>
                     <TableCell>{client.phone || '—'}</TableCell>
-                    <TableCell>{client.birthDate ? nfDateShort(client.birthDate) : '—'}</TableCell>
-                    <TableCell>
+                    {/* <TableCell>{client.birthDate ? nfDateShort(client.birthDate) : '—'}</TableCell> */}
+                    {/* <TableCell>
                       <StatusChip status={client.status} />
-                    </TableCell>
+                    </TableCell> */}
                     <TableCell>
                       <SubChip status={client.subscriptionStatus} />
                     </TableCell>
@@ -686,7 +803,7 @@ const MembersPage: React.FC = () => {
                       <Button
                         color="error"
                         size="small"
-                        onClick={() => requestDelete(client.id)}
+                        onClick={() => setDeleteId(client.id)}
                         disabled={deleting}
                         sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
                       >
@@ -698,6 +815,22 @@ const MembersPage: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+
+          {/* Paginación MUI (desktop) */}
+          <TablePagination
+            component="div"
+            count={total}
+            page={page - 1} // MUI es 0-based
+            onPageChange={(_, nextPageZero) => setPage(nextPageZero + 1)}
+            rowsPerPage={limit}
+            onRowsPerPageChange={(e) => {
+              setLimit(clampLimit(Number(e.target.value)));
+              setPage(1);
+            }}
+            rowsPerPageOptions={[10, 20, 50, 100]}
+            labelRowsPerPage="Filas"
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+          />
         </Paper>
       )}
 
@@ -940,9 +1073,11 @@ const MembersPage: React.FC = () => {
       <QuickRegisterDialog
         open={quickOpen}
         onClose={() => setQuickOpen(false)}
-        onSuccess={() => {
+        onSuccess={async () => {
           setQuickOpen(false);
-          loadClients();
+          // al dar de alta, volvemos a página 1 para ver el nuevo arriba (según order)
+          setPage(1);
+          await loadClients({ resetPage: true });
         }}
       />
     </Box>
