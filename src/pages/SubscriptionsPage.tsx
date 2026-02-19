@@ -215,6 +215,18 @@ export default function SubscriptionsPage() {
 
   const [renewingId, setRenewingId] = useState<string>('');
 
+  const [renewModal, setRenewModal] = useState<{
+    open: boolean;
+    clientId: string;
+    branchId: string;
+    currentPlanId: string;
+  } | null>(null);
+
+  const [renewPlanId, setRenewPlanId] = useState<string>('');
+  const [renewPlans, setRenewPlans] = useState<Plan[]>([]);
+  const [renewLoading, setRenewLoading] = useState(false);
+  const [renewError, setRenewError] = useState('');
+
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -342,32 +354,43 @@ export default function SubscriptionsPage() {
     }
   };
 
-  const handleRenew = async (subscription: Subscription) => {
-    setError('');
-    setRenewingId(subscription.id);
+  const handleRenew = async (sub: Subscription) => {
+    setRenewModal({
+      open: true,
+      clientId: sub.client.id,
+      branchId: sub.branchId,
+      currentPlanId: sub.plan.id,
+    });
+    setRenewPlanId(sub.plan.id);
+    setRenewLoading(true);
+    setRenewError('');
     try {
-      // opcional: traer plan actual con precio (si lo necesitás en Payments)
-      const planRes = await api.get<Plan>(`/plans/${subscription.plan.id}`);
-      const currentPlan = planRes.data;
-
-      const res = await api.patch<Subscription>(`/subscriptions/${subscription.id}/renew`);
-      const newSubscription = res.data;
-
-      // asegurar que en Payments tenga el plan con price si el backend no lo devuelve completo
-      (newSubscription as any).plan = { ...newSubscription.plan, ...currentPlan };
-
-      await fetchSubs();
-
-      navigate('/payments', {
-        state: {
-          renewedSubscription: newSubscription,
-          preselectedClient: subscription.client,
-        },
-      });
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Error al renovar suscripción.');
+      const res = await api.get<Plan[]>(`/plans/by-branch/${sub.branchId}`);
+      setRenewPlans(res.data);
+    } catch {
+      setRenewPlans([]);
+      setRenewError('No se pudieron cargar los planes.');
     } finally {
-      setRenewingId('');
+      setRenewLoading(false);
+    }
+  };
+
+  const confirmRenew = async () => {
+    if (!renewModal || !renewPlanId) return;
+    setRenewLoading(true);
+    setRenewError('');
+    try {
+      await api.post('/subscriptions/renew-for-client', {
+        clientId: renewModal.clientId,
+        branchId: renewModal.branchId,
+        planId: renewPlanId,
+      });
+      setRenewModal(null);
+      await fetchSubs();
+    } catch (e: any) {
+      setRenewError(e?.response?.data?.message || 'Error al renovar suscripción.');
+    } finally {
+      setRenewLoading(false);
     }
   };
 
@@ -776,6 +799,40 @@ export default function SubscriptionsPage() {
           </DialogActions>
         </form>
       </Dialog>
+
+      {/* Modal renovar suscripción */}
+      {renewModal && (
+        <Dialog open={renewModal.open} onClose={() => setRenewModal(null)} fullWidth maxWidth="sm">
+          <DialogTitle sx={{ fontWeight: 900 }}>Renovar suscripción</DialogTitle>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {renewError && <Alert severity="error">{renewError}</Alert>}
+            <TextField
+              select
+              label="Plan"
+              value={renewPlanId}
+              onChange={e => setRenewPlanId(e.target.value)}
+              fullWidth
+              disabled={renewLoading}
+            >
+              {renewPlans.map(plan => (
+                <MenuItem key={plan.id} value={plan.id}>
+                  {plan.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRenewModal(null)} disabled={renewLoading}>Cancelar</Button>
+            <Button
+              onClick={confirmRenew}
+              variant="contained"
+              disabled={!renewPlanId || renewLoading}
+            >
+              Renovar
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 }
