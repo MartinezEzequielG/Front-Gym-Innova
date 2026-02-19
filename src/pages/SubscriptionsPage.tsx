@@ -27,7 +27,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import { alpha } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -213,7 +213,7 @@ export default function SubscriptionsPage() {
     branchId: '',
   });
 
-  const [renewingId, setRenewingId] = useState<string>('');
+  const [renewingId] = useState<string>(''); // solo el getter, si lo usás en JSX
 
   const [renewModal, setRenewModal] = useState<{
     open: boolean;
@@ -228,7 +228,6 @@ export default function SubscriptionsPage() {
   const [renewError, setRenewError] = useState('');
 
   const location = useLocation();
-  const navigate = useNavigate();
 
   const loading = status === 'loading';
 
