@@ -60,7 +60,10 @@ interface Subscription {
   startDate: string;
   endDate: string;
   status?: string;
+  branchId?: string; // por si en algún response viene
 }
+
+type Plan = { id: string; name: string; price: number; branchId?: string };
 
 const paymentStatus = ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED'] as const;
 const paymentProviders = ['mercado_pago', 'manual', 'otro'] as const;
@@ -178,6 +181,12 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [open, setOpen] = useState(false);
 
+  // ✅ renew flow state
+  const [isRenewFlow, setIsRenewFlow] = useState(false);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+
   // form
   const [form, setForm] = useState({
     clientId: '',
@@ -204,7 +213,7 @@ export default function PaymentsPage() {
 
   // filters
   const [filters, setFilters] = useState({
-    q: '', // unificamos
+    q: '',
     status: '',
     from: '',
     to: '',
@@ -230,7 +239,6 @@ export default function PaymentsPage() {
     return t;
   }, [payments]);
 
-  // fetch payments
   const fetchPayments = async () => {
     setStatus('loading');
     setError('');
@@ -244,7 +252,7 @@ export default function PaymentsPage() {
       const res = await api.get<Payment[]>('/payments', { params });
       setPayments(res.data);
       setStatus('success');
-    } catch (e) {
+    } catch {
       setPayments([]);
       setStatus('error');
       setError('No se pudieron cargar los pagos.');
@@ -260,17 +268,38 @@ export default function PaymentsPage() {
   useEffect(() => {
     const state = location.state as any;
     if (state?.renewedSubscription && state?.preselectedClient) {
-      const { renewedSubscription, preselectedClient } = state;
+      setIsRenewFlow(true);
+      setError('');
+      setSubscriptionError('');
 
-      setClientOptions([preselectedClient]);
-      setSelectedClient(preselectedClient);
-      setCurrentSubscription(renewedSubscription);
+      const branchId = (state.renewedSubscription as any).branchId || (state?.branchId as string | undefined);
+      if (branchId) {
+        setPlanLoading(true);
+        (async () => {
+          try {
+            const r = await api.get<Plan[]>(`/plans/by-branch/${branchId}`);
+            setPlans(r.data);
+          } catch {
+            setPlans([]);
+          } finally {
+            setPlanLoading(false);
+          }
+        })();
+      } else {
+        setPlans([]);
+      }
+
+      setSelectedPlanId(state.renewedSubscription.plan.id);
+
+      setClientOptions([state.preselectedClient]);
+      setSelectedClient(state.preselectedClient);
+      setCurrentSubscription(state.renewedSubscription);
 
       setForm((f) => ({
         ...f,
-        clientId: preselectedClient.id,
-        subscriptionId: renewedSubscription.id,
-        amount: String(renewedSubscription.plan.price),
+        clientId: state.preselectedClient.id,
+        subscriptionId: state.renewedSubscription.id,
+        amount: String(state.renewedSubscription.plan.price),
         provider: 'manual',
         method: 'CASH',
         status: 'APPROVED',
@@ -300,6 +329,11 @@ export default function PaymentsPage() {
   };
 
   const handleClientChange = async (_: any, value: ClientOption | null) => {
+    // si el usuario cambia manualmente el cliente, salimos del renew flow
+    setIsRenewFlow(false);
+    setPlans([]);
+    setSelectedPlanId('');
+
     setSelectedClient(value);
     setForm((f) => ({ ...f, clientId: value ? value.id : '', subscriptionId: '', amount: '' }));
     setCurrentSubscription(null);
@@ -309,7 +343,10 @@ export default function PaymentsPage() {
 
     setSubscriptionLoading(true);
     try {
-      const res = await api.get<Subscription[]>(`/subscriptions/by-client/${value.id}`, { params: { status: 'PENDIENTE_PAGO' } });
+      const res = await api.get<Subscription[]>(`/subscriptions/by-client/${value.id}`, {
+        params: { status: 'PENDIENTE_PAGO' },
+      });
+
       if (res.data.length > 0) {
         const sub = res.data[0];
         setCurrentSubscription(sub);
@@ -355,11 +392,18 @@ export default function PaymentsPage() {
       notes: '',
       receiptUrl: '',
     });
+
     setSelectedClient(null);
     setClientSearch('');
     setClientOptions([]);
     setCurrentSubscription(null);
     setSubscriptionError('');
+
+    // reset renew flow
+    setIsRenewFlow(false);
+    setPlans([]);
+    setPlanLoading(false);
+    setSelectedPlanId('');
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -398,115 +442,439 @@ export default function PaymentsPage() {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   };
 
+  const handleChangePlanForRenew = async (planId: string) => {
+    if (!currentSubscription?.id) return;
+    setSelectedPlanId(planId);
+    setError('');
+
+    setSubscriptionLoading(true);
+    try {
+      // ✅ backend: crea nueva subscription PENDIENTE_PAGO con el plan elegido
+      const res = await api.patch<Subscription>(`/subscriptions/${currentSubscription.id}/renew`, { planId });
+
+      const newSub = res.data;
+      setCurrentSubscription(newSub);
+
+      setForm((f) => ({
+        ...f,
+        subscriptionId: newSub.id,
+        amount: String(newSub.plan.price),
+      }));
+    } catch {
+      setError('No se pudo renovar con el plan seleccionado.');
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
   return (
-      <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
-        {/* Header estilo Caja/Dashboard */}
-        <Paper
-          variant="outlined"
-          sx={{
-            borderRadius: 4,
-            p: { xs: 2, md: 2.5 },
-            mb: 3,
-            borderColor: 'rgba(0,0,0,0.08)',
-            boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
-            background:
-              'radial-gradient(1200px 200px at 10% 0%, rgba(25,118,210,0.14) 0%, rgba(255,255,255,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
-          }}
-        >
-          <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} justifyContent="space-between" gap={2}>
-            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-              <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: -0.4 }}>
-                Pagos
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Registro y consulta de pagos (manuales / MP) con filtros.
-              </Typography>
+    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
+      {/* Header */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: 4,
+          p: { xs: 2, md: 2.5 },
+          mb: 3,
+          borderColor: 'rgba(0,0,0,0.08)',
+          boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+          background:
+            'radial-gradient(1200px 200px at 10% 0%, rgba(25,118,210,0.14) 0%, rgba(255,255,255,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} justifyContent="space-between" gap={2}>
+          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+            <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: -0.4 }}>
+              Pagos
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Registro y consulta de pagos (manuales / MP) con filtros.
+            </Typography>
 
-              <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
-                <Chip label={`Registros: ${totals.count}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
-                <Chip
-                  label={`Aprobado: ${nfMoneyARS(totals.APPROVED)}`}
-                  sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
-                />
-                <Chip
-                  label={`Pendiente: ${nfMoneyARS(totals.PENDING)}`}
-                  sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#f59e0b', 0.14), color: '#b45309' }}
-                />
-                {loading && <CircularProgress size={18} />}
-              </Stack>
-            </Stack>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} alignItems={{ sm: 'center' }}>
-              <Button
-                variant="contained"
-                onClick={() => {
-                  setOpen(true);
-                  setError('');
-                }}
-                disabled={loading}
-                sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
-              >
-                Agregar pago
-              </Button>
-
-              <Button
-                onClick={fetchPayments}
-                disabled={loading}
-                sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
-              >
-                Actualizar
-              </Button>
+            <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
+              <Chip label={`Registros: ${totals.count}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
+              <Chip
+                label={`Aprobado: ${nfMoneyARS(totals.APPROVED)}`}
+                sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
+              />
+              <Chip
+                label={`Pendiente: ${nfMoneyARS(totals.PENDING)}`}
+                sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#f59e0b', 0.14), color: '#b45309' }}
+              />
+              {loading && <CircularProgress size={18} />}
             </Stack>
           </Stack>
 
-          {status === 'error' && (
-            <Alert severity="error" sx={{ mt: 2, borderRadius: 3 }}>
-              {error || 'Error cargando pagos.'}
-            </Alert>
-          )}
-        </Paper>
-
-        {/* Filtros */}
-        <Paper
-          variant="outlined"
-          sx={{
-            borderRadius: 4,
-            p: 2.25,
-            mb: 2.5,
-            borderColor: 'rgba(0,0,0,0.08)',
-            boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
-          }}
-        >
-          <Stack direction={{ xs: 'column', md: 'row' }} gap={1.25} alignItems={{ md: 'center' }}>
-            <Autocomplete
-              freeSolo
-              options={filterClientOptions}
-              loading={filterClientLoading}
-              getOptionLabel={(option) =>
-                typeof option === 'string'
-                  ? option
-                  : `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}`
-              }
-              onInputChange={handleFilterClientInputChange}
-              onChange={(_, value) => {
-                const v = typeof value === 'string' ? value : value ? `${value.name} ${value.email} ${value.dni ?? ''}` : '';
-                setFilters((f) => ({ ...f, q: v }));
+          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25} alignItems={{ sm: 'center' }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setOpen(true);
+                setError('');
               }}
-              renderInput={(params) => <TextField {...params} label="Buscar (cliente/email/DNI)" size="small" fullWidth />}
-              sx={{ flex: 1 }}
+              disabled={loading}
+              sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+            >
+              Agregar pago
+            </Button>
+
+            <Button
+              onClick={fetchPayments}
+              disabled={loading}
+              sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+            >
+              Actualizar
+            </Button>
+          </Stack>
+        </Stack>
+
+        {status === 'error' && (
+          <Alert severity="error" sx={{ mt: 2, borderRadius: 3 }}>
+            {error || 'Error cargando pagos.'}
+          </Alert>
+        )}
+      </Paper>
+
+      {/* Filtros */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: 4,
+          p: 2.25,
+          mb: 2.5,
+          borderColor: 'rgba(0,0,0,0.08)',
+          boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} gap={1.25} alignItems={{ md: 'center' }}>
+          <Autocomplete
+            freeSolo
+            options={filterClientOptions}
+            loading={filterClientLoading}
+            getOptionLabel={(option) =>
+              typeof option === 'string'
+                ? option
+                : `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}`
+            }
+            onInputChange={handleFilterClientInputChange}
+            onChange={(_, value) => {
+              const v = typeof value === 'string' ? value : value ? `${value.name} ${value.email} ${value.dni ?? ''}` : '';
+              setFilters((f) => ({ ...f, q: v }));
+            }}
+            renderInput={(params) => <TextField {...params} label="Buscar (cliente/email/DNI)" size="small" fullWidth />}
+            sx={{ flex: 1 }}
+          />
+
+          <TextField
+            label="Estado"
+            value={filters.status}
+            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+            select
+            size="small"
+            sx={{ minWidth: { xs: '100%', md: 220 } }}
+          >
+            <MenuItem value="">
+              <em>Todos</em>
+            </MenuItem>
+            {paymentStatus.map((s) => (
+              <MenuItem key={s} value={s}>
+                {s}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            label="Desde"
+            type="date"
+            value={filters.from}
+            onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: '100%', md: 180 } }}
+          />
+          <TextField
+            label="Hasta"
+            type="date"
+            value={filters.to}
+            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: '100%', md: 180 } }}
+          />
+
+          <Button
+            variant="outlined"
+            onClick={fetchPayments}
+            disabled={loading}
+            sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900, minWidth: { xs: '100%', md: 140 } }}
+          >
+            Buscar
+          </Button>
+        </Stack>
+      </Paper>
+
+      {/* MOBILE */}
+      <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+        <Stack spacing={1.5}>
+          {!loading && payments.length === 0 && (
+            <Paper
+              variant="outlined"
+              sx={{
+                borderRadius: 4,
+                p: 2.25,
+                borderColor: 'rgba(0,0,0,0.08)',
+                boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                No se encontraron pagos con los filtros aplicados.
+              </Typography>
+            </Paper>
+          )}
+
+          {payments.map((p) => (
+            <PaymentCard key={p.id} p={p} />
+          ))}
+        </Stack>
+      </Box>
+
+      {/* DESKTOP */}
+      <Paper
+        variant="outlined"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          borderRadius: 4,
+          borderColor: 'rgba(0,0,0,0.08)',
+          boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+        }}
+      >
+        <TableContainer sx={{ maxHeight: 620, overflowX: 'auto' }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Cliente</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Email</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>DNI</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Proveedor</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Método</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Monto</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Estado</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Comprobante</TableCell>
+                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Fecha</TableCell>
+              </TableRow>
+            </TableHead>
+
+            <TableBody>
+              {!loading && payments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={10} sx={{ py: 4 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No se encontraron pagos con los filtros aplicados.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {payments.map((p, idx) => (
+                <TableRow
+                  key={p.id}
+                  hover
+                  sx={{
+                    '& td': { borderBottomColor: 'rgba(0,0,0,0.06)' },
+                    backgroundColor: idx % 2 === 0 ? 'rgba(0,0,0,0.012)' : 'transparent',
+                  }}
+                >
+                  <TableCell sx={{ fontWeight: 900 }}>{p.client?.name ?? p.clientId}</TableCell>
+                  <TableCell>{p.client?.email ?? '—'}</TableCell>
+                  <TableCell sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                    {p.client?.dni ?? '—'}
+                  </TableCell>
+                  <TableCell>{p.provider}</TableCell>
+                  <TableCell>{p.method}</TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {p.currency?.toUpperCase() === 'ARS' || !p.currency
+                      ? nfMoneyARS(Number(p.amount))
+                      : `${p.amount} ${p.currency}`}
+                  </TableCell>
+                  <TableCell>
+                    <StatusChip status={p.status} />
+                  </TableCell>
+                  <TableCell>{p.branchName ?? '—'}</TableCell>
+                  <TableCell>
+                    {p.receiptUrl ? (
+                      <Button
+                        size="small"
+                        href={p.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
+                      >
+                        Ver
+                      </Button>
+                    ) : (
+                      '—'
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: 170 }}>{nfDateTime(p.createdAt)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* Modal crear pago */}
+      <Dialog
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          resetForm();
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Agregar pago</DialogTitle>
+        <form onSubmit={handleCreate}>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {error && (
+              <Alert severity="error" sx={{ borderRadius: 3 }}>
+                {error}
+              </Alert>
+            )}
+
+            <Autocomplete
+              options={clientOptions}
+              loading={clientLoading}
+              value={selectedClient}
+              inputValue={clientSearch}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              getOptionLabel={(option) =>
+                option ? `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}` : ''
+              }
+              onInputChange={handleClientInputChange}
+              onChange={handleClientChange}
+              renderInput={(params) => <TextField {...params} label="Cliente (buscar por nombre, mail o DNI)" required />}
+              disabled={isRenewFlow} // opcional: bloqueás cambiar cliente si venís desde renovar
             />
 
-            <TextField
-              label="Estado"
-              value={filters.status}
-              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-              select
-              size="small"
-              sx={{ minWidth: { xs: '100%', md: 220 } }}
+            {subscriptionLoading && (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Procesando… (suscripción / planes)
+              </Typography>
+            )}
+
+            {/* ✅ Selector de plan SOLO en renew flow */}
+            {isRenewFlow && (
+              <TextField
+                label="Plan para renovar"
+                value={selectedPlanId}
+                onChange={(e) => handleChangePlanForRenew(e.target.value)}
+                select
+                fullWidth
+                disabled={planLoading || subscriptionLoading || plans.length === 0}
+                helperText={
+                  planLoading
+                    ? 'Cargando planes…'
+                    : plans.length === 0
+                      ? 'No hay planes disponibles para esta sucursal.'
+                      : 'Elegí el plan con el que querés renovar.'
+                }
+              >
+                {plans.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name} • {nfMoneyARS(p.price)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            {currentSubscription && (
+              <Paper
+                variant="outlined"
+                sx={{
+                  borderRadius: 3,
+                  p: 2,
+                  borderColor: alpha('#10b981', 0.25),
+                  background: alpha('#10b981', 0.06),
+                }}
+              >
+                <Typography sx={{ fontWeight: 900 }}>
+                  Suscripción pendiente: {currentSubscription.plan.name} • {nfMoneyARS(currentSubscription.plan.price)}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Vigencia: {currentSubscription.startDate.slice(0, 10)} a {currentSubscription.endDate.slice(0, 10)}
+                </Typography>
+              </Paper>
+            )}
+
+            {subscriptionError && (
+              <Alert severity="warning" sx={{ borderRadius: 3 }}>
+                {subscriptionError}
+              </Alert>
+            )}
+
+            <Button
+              variant="outlined"
+              onClick={() => setOpenCreateClient(true)}
+              sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
+              disabled={isRenewFlow}
             >
-              <MenuItem value="">
-                <em>Todos</em>
-              </MenuItem>
+              ¿No encontrás el cliente? Crear nuevo
+            </Button>
+
+            <Divider />
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
+              <TextField
+                label="Proveedor"
+                name="provider"
+                value={form.provider}
+                onChange={onChangeForm}
+                select
+                required
+                fullWidth
+              >
+                {paymentProviders.map((p) => (
+                  <MenuItem key={p} value={p}>
+                    {p}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                label="Método"
+                name="method"
+                value={form.method}
+                onChange={onChangeForm}
+                select
+                required
+                fullWidth
+              >
+                {paymentMethods.map((m) => (
+                  <MenuItem key={m} value={m}>
+                    {m}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
+              <TextField
+                label="Monto"
+                name="amount"
+                type="number"
+                value={form.amount}
+                onChange={onChangeForm}
+                required
+                fullWidth
+                InputProps={{ readOnly: Boolean(currentSubscription) }} // ✅ sigue bloqueado
+              />
+              <TextField label="Moneda" name="currency" value={form.currency} onChange={onChangeForm} fullWidth />
+            </Stack>
+
+            <TextField label="Estado" name="status" value={form.status} onChange={onChangeForm} select fullWidth>
               {paymentStatus.map((s) => (
                 <MenuItem key={s} value={s}>
                   {s}
@@ -514,366 +882,85 @@ export default function PaymentsPage() {
               ))}
             </TextField>
 
-            <TextField
-              label="Desde"
-              type="date"
-              value={filters.from}
-              onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
-              size="small"
-              InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: { xs: '100%', md: 180 } }}
-            />
-            <TextField
-              label="Hasta"
-              type="date"
-              value={filters.to}
-              onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
-              size="small"
-              InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: { xs: '100%', md: 180 } }}
-            />
+            <TextField label="Notas" name="notes" value={form.notes} onChange={onChangeForm} fullWidth />
 
-            <Button
-              variant="outlined"
-              onClick={fetchPayments}
-              disabled={loading}
-              sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900, minWidth: { xs: '100%', md: 140 } }}
-            >
-              Buscar
-            </Button>
-          </Stack>
-        </Paper>
-
-        {/* MOBILE: Cards */}
-        <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-          <Stack spacing={1.5}>
-            {!loading && payments.length === 0 && (
-              <Paper
-                variant="outlined"
-                sx={{
-                  borderRadius: 4,
-                  p: 2.25,
-                  borderColor: 'rgba(0,0,0,0.08)',
-                  boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
-                }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  No se encontraron pagos con los filtros aplicados.
-                </Typography>
-              </Paper>
-            )}
-
-            {payments.map((p) => (
-              <PaymentCard key={p.id} p={p} />
-            ))}
-          </Stack>
-        </Box>
-
-        {/* DESKTOP: Table */}
-        <Paper
-          variant="outlined"
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            borderRadius: 4,
-            borderColor: 'rgba(0,0,0,0.08)',
-            boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
-            overflow: 'hidden',
-          }}
-        >
-          <TableContainer sx={{ maxHeight: 620, overflowX: 'auto' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Cliente</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Email</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>DNI</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Proveedor</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Método</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Monto</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Estado</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Comprobante</TableCell>
-                  <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Fecha</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {!loading && payments.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={10} sx={{ py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No se encontraron pagos con los filtros aplicados.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-
-                {payments.map((p, idx) => (
-                  <TableRow
-                    key={p.id}
-                    hover
-                    sx={{
-                      '& td': { borderBottomColor: 'rgba(0,0,0,0.06)' },
-                      backgroundColor: idx % 2 === 0 ? 'rgba(0,0,0,0.012)' : 'transparent',
-                    }}
-                  >
-                    <TableCell sx={{ fontWeight: 900 }}>{p.client?.name ?? p.clientId}</TableCell>
-                    <TableCell>{p.client?.email ?? '—'}</TableCell>
-                    <TableCell sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                      {p.client?.dni ?? '—'}
-                    </TableCell>
-                    <TableCell>{p.provider}</TableCell>
-                    <TableCell>{p.method}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>
-                      {p.currency?.toUpperCase() === 'ARS' || !p.currency
-                        ? nfMoneyARS(Number(p.amount))
-                        : `${p.amount} ${p.currency}`}
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={p.status} />
-                    </TableCell>
-                    <TableCell>{p.branchName ?? '—'}</TableCell>
-                    <TableCell>
-                      {p.receiptUrl ? (
-                        <Button
-                          size="small"
-                          href={p.receiptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
-                        >
-                          Ver
-                        </Button>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ minWidth: 170 }}>{nfDateTime(p.createdAt)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-
-        {/* Modal crear pago */}
-        <Dialog
-          open={open}
-          onClose={() => {
-            setOpen(false);
-            resetForm();
-          }}
-          fullWidth
-          maxWidth="sm"
-        >
-          <DialogTitle sx={{ fontWeight: 900 }}>Agregar pago</DialogTitle>
-          <form onSubmit={handleCreate}>
-            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {error && (
-                <Alert severity="error" sx={{ borderRadius: 3 }}>
-                  {error}
-                </Alert>
-              )}
-
-              <Autocomplete
-                options={clientOptions}
-                loading={clientLoading}
-                value={selectedClient}
-                inputValue={clientSearch}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                getOptionLabel={(option) =>
-                  option ? `${option.name} (${option.email})${option.dni ? ' - DNI: ' + option.dni : ''}` : ''
-                }
-                onInputChange={handleClientInputChange}
-                onChange={handleClientChange}
-                renderInput={(params) => (
-                  <TextField {...params} label="Cliente (buscar por nombre, mail o DNI)" required />
-                )}
-              />
-
-              {subscriptionLoading && (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Buscando suscripción pendiente…
-                </Typography>
-              )}
-
-              {currentSubscription && (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 3,
-                    p: 2,
-                    borderColor: alpha('#10b981', 0.25),
-                    background: alpha('#10b981', 0.06),
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 900 }}>
-                    Suscripción pendiente: {currentSubscription.plan.name} • {nfMoneyARS(currentSubscription.plan.price)}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Vigencia: {currentSubscription.startDate.slice(0, 10)} a {currentSubscription.endDate.slice(0, 10)}
-                  </Typography>
-                </Paper>
-              )}
-
-              {subscriptionError && (
-                <Alert severity="warning" sx={{ borderRadius: 3 }}>
-                  {subscriptionError}
-                </Alert>
-              )}
-
-              <Button
-                variant="outlined"
-                onClick={() => setOpenCreateClient(true)}
-                sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
-              >
-                ¿No encontrás el cliente? Crear nuevo
-              </Button>
-
-              <Divider />
-
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
-                <TextField
-                  label="Proveedor"
-                  name="provider"
-                  value={form.provider}
-                  onChange={onChangeForm}
-                  select
-                  required
-                  fullWidth
-                >
-                  {paymentProviders.map((p) => (
-                    <MenuItem key={p} value={p}>
-                      {p}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                <TextField
-                  label="Método"
-                  name="method"
-                  value={form.method}
-                  onChange={onChangeForm}
-                  select
-                  required
-                  fullWidth
-                >
-                  {paymentMethods.map((m) => (
-                    <MenuItem key={m} value={m}>
-                      {m}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
-
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.25}>
-                <TextField
-                  label="Monto"
-                  name="amount"
-                  type="number"
-                  value={form.amount}
-                  onChange={onChangeForm}
-                  required
-                  fullWidth
-                  // Si hay suscripción pendiente, lo fijamos; si no, permitimos manual
-                  InputProps={{ readOnly: Boolean(currentSubscription) }}
-                />
-                <TextField label="Moneda" name="currency" value={form.currency} onChange={onChangeForm} fullWidth />
-              </Stack>
-
-              <TextField label="Estado" name="status" value={form.status} onChange={onChangeForm} select fullWidth>
-                {paymentStatus.map((s) => (
-                  <MenuItem key={s} value={s}>
-                    {s}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <TextField label="Notas" name="notes" value={form.notes} onChange={onChangeForm} fullWidth />
-
-              <TextField
-                label="Comprobante (URL)"
-                name="receiptUrl"
-                value={form.receiptUrl}
-                onChange={onChangeForm}
-                fullWidth
-              />
-            </DialogContent>
-
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-              <Button
-                onClick={() => {
-                  setOpen(false);
-                  resetForm();
-                }}
-                sx={{ textTransform: 'none', fontWeight: 900 }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                disabled={!form.clientId || (!form.amount || Number(form.amount) <= 0) || subscriptionLoading}
-                sx={{ textTransform: 'none', fontWeight: 900 }}
-              >
-                Guardar
-              </Button>
-            </DialogActions>
-          </form>
-        </Dialog>
-
-        {/* Modal crear cliente */}
-        <Dialog open={openCreateClient} onClose={() => setOpenCreateClient(false)} fullWidth maxWidth="sm">
-          <DialogTitle sx={{ fontWeight: 900 }}>Crear nuevo cliente</DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Nombre"
-              value={newClient.name}
-              onChange={(e) => setNewClient((c) => ({ ...c, name: e.target.value }))}
-              required
-            />
-            <TextField
-              label="Email"
-              value={newClient.email}
-              onChange={(e) => setNewClient((c) => ({ ...c, email: e.target.value }))}
-              required
-              type="email"
-            />
-            <TextField
-              label="DNI"
-              value={newClient.dni}
-              onChange={(e) => setNewClient((c) => ({ ...c, dni: e.target.value }))}
-              required
-            />
+            <TextField label="Comprobante (URL)" name="receiptUrl" value={form.receiptUrl} onChange={onChangeForm} fullWidth />
           </DialogContent>
+
           <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setOpenCreateClient(false)} sx={{ textTransform: 'none', fontWeight: 900 }}>
+            <Button
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
+              sx={{ textTransform: 'none', fontWeight: 900 }}
+            >
               Cancelar
             </Button>
             <Button
+              type="submit"
               variant="contained"
-              onClick={async () => {
-                setCreatingClient(true);
-                try {
-                  const res = await api.post<ClientOption>('/clients', newClient);
-                  setClientOptions((opts) => [res.data, ...opts]);
-                  setSelectedClient(res.data);
-                  setForm((f) => ({ ...f, clientId: res.data.id }));
-                  setOpenCreateClient(false);
-                  setNewClient({ name: '', email: '', dni: '' });
-                } catch {
-                  setError('Error al crear cliente.');
-                } finally {
-                  setCreatingClient(false);
-                }
-              }}
-              disabled={creatingClient}
+              disabled={!form.clientId || (!form.amount || Number(form.amount) <= 0) || subscriptionLoading}
               sx={{ textTransform: 'none', fontWeight: 900 }}
             >
-              {creatingClient ? 'Creando…' : 'Crear'}
+              Guardar
             </Button>
           </DialogActions>
-        </Dialog>
-      </Box>
+        </form>
+      </Dialog>
+
+      {/* Modal crear cliente */}
+      <Dialog open={openCreateClient} onClose={() => setOpenCreateClient(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ fontWeight: 900 }}>Crear nuevo cliente</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Nombre"
+            value={newClient.name}
+            onChange={(e) => setNewClient((c) => ({ ...c, name: e.target.value }))}
+            required
+          />
+          <TextField
+            label="Email"
+            value={newClient.email}
+            onChange={(e) => setNewClient((c) => ({ ...c, email: e.target.value }))}
+            required
+            type="email"
+          />
+          <TextField
+            label="DNI"
+            value={newClient.dni}
+            onChange={(e) => setNewClient((c) => ({ ...c, dni: e.target.value }))}
+            required
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setOpenCreateClient(false)} sx={{ textTransform: 'none', fontWeight: 900 }}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              setCreatingClient(true);
+              try {
+                const res = await api.post<ClientOption>('/clients', newClient);
+                setClientOptions((opts) => [res.data, ...opts]);
+                setSelectedClient(res.data);
+                setForm((f) => ({ ...f, clientId: res.data.id }));
+                setOpenCreateClient(false);
+                setNewClient({ name: '', email: '', dni: '' });
+              } catch {
+                setError('Error al crear cliente.');
+              } finally {
+                setCreatingClient(false);
+              }
+            }}
+            disabled={creatingClient}
+            sx={{ textTransform: 'none', fontWeight: 900 }}
+          >
+            {creatingClient ? 'Creando…' : 'Crear'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
