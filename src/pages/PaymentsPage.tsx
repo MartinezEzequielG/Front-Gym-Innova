@@ -1,5 +1,5 @@
 // src/pages/PaymentsPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -22,6 +22,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  Pagination,
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import { alpha } from '@mui/material/styles';
@@ -60,10 +61,15 @@ interface Subscription {
   startDate: string;
   endDate: string;
   status?: string;
-  branchId?: string; // por si en algún response viene
+  branchId?: string;
 }
 
 type Plan = { id: string; name: string; price: number; branchId?: string };
+
+type PaymentsPagedResponse = {
+  data: Payment[];
+  meta: { total: number; page: number; limit: number; pages: number };
+};
 
 const paymentStatus = ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED'] as const;
 const paymentProviders = ['mercado_pago', 'manual', 'otro'] as const;
@@ -181,6 +187,16 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [open, setOpen] = useState(false);
 
+  // ✅ paginación server-side
+  const [page, setPage] = useState(1); // 1-based
+  const [limit, setLimit] = useState(25);
+  const [meta, setMeta] = useState<{ total: number; page: number; limit: number; pages: number }>({
+    total: 0,
+    page: 1,
+    limit: 25,
+    pages: 1,
+  });
+
   // ✅ renew flow state
   const [isRenewFlow, setIsRenewFlow] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -233,36 +249,80 @@ export default function PaymentsPage() {
 
   const loading = status === 'loading';
 
-  const totals = useMemo(() => {
-    const t = { APPROVED: 0, PENDING: 0, REJECTED: 0, REFUNDED: 0, count: payments.length };
-    for (const p of payments) t[p.status] += p.amount;
-    return t;
-  }, [payments]);
+  const buildParams = () => {
+    const params: any = {
+      page,
+      limit,
+    };
+    if (filters.q) params.q = filters.q;
+    if (filters.status) params.status = filters.status;
+    if (filters.from) params.from = filters.from;
+    if (filters.to) params.to = filters.to;
+    return params;
+  };
 
-  const fetchPayments = async () => {
+  const fetchPayments = async (opts?: { keepPage?: boolean }) => {
     setStatus('loading');
     setError('');
     try {
-      const params: any = {};
-      if (filters.q) params.q = filters.q;
-      if (filters.status) params.status = filters.status;
-      if (filters.from) params.from = filters.from;
-      if (filters.to) params.to = filters.to;
+      const params = buildParams();
+      if (opts?.keepPage === false) params.page = 1;
 
-      const res = await api.get<Payment[]>('/payments', { params });
-      setPayments(res.data);
+      const res = await api.get<PaymentsPagedResponse>('/payments', { params });
+
+      const payload = res.data as any;
+      const list: Payment[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : Array.isArray(payload?.results)
+              ? payload.results
+              : [];
+
+      const metaFromApi =
+        payload?.meta && typeof payload.meta === 'object'
+          ? payload.meta
+          : {
+              total: list.length,
+              page: params.page ?? 1,
+              limit: params.limit ?? 25,
+              pages: 1,
+            };
+
+      setPayments(list);
+      setMeta({
+        total: Number(metaFromApi.total) || 0,
+        page: Number(metaFromApi.page) || (params.page ?? 1),
+        limit: Number(metaFromApi.limit) || (params.limit ?? 25),
+        pages: Math.max(1, Number(metaFromApi.pages) || 1),
+      });
+
+      // sincronizar state local (si backend ajusta page)
+      const nextPage = Number(metaFromApi.page) || (params.page ?? 1);
+      if (nextPage !== page) setPage(nextPage);
+
       setStatus('success');
     } catch {
       setPayments([]);
+      setMeta((m) => ({ ...m, total: 0, pages: 1 }));
       setStatus('error');
       setError('No se pudieron cargar los pagos.');
     }
   };
 
+  // cuando cambia ruta o se vuelve a esta pantalla
   useEffect(() => {
     fetchPayments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, filters.from, filters.to]);
+  }, [location.pathname]);
+
+  // refetch en cambios de filtros / paginación
+  useEffect(() => {
+    fetchPayments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.status, filters.from, filters.to, page, limit]);
 
   // deep-link renewal
   useEffect(() => {
@@ -408,6 +468,7 @@ export default function PaymentsPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
 
     try {
       const payload = {
@@ -425,7 +486,10 @@ export default function PaymentsPage() {
 
       await api.post('/payments', payload);
 
-      await fetchPayments();
+      // refrescar primer page para ver el pago arriba (createdAt desc)
+      setPage(1);
+      await fetchPayments({ keepPage: false });
+
       setOpen(false);
       resetForm();
     } catch (err: any) {
@@ -467,6 +531,14 @@ export default function PaymentsPage() {
     }
   };
 
+  const applySearch = async () => {
+    // cuando tocás Buscar, reseteo página (mismo criterio que clientes)
+    setPage(1);
+    await fetchPayments({ keepPage: false });
+  };
+
+  const rowsPerPageOptions = [10, 25, 50, 100];
+
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
       {/* Header */}
@@ -482,7 +554,12 @@ export default function PaymentsPage() {
             'radial-gradient(1200px 200px at 10% 0%, rgba(25,118,210,0.14) 0%, rgba(255,255,255,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))',
         }}
       >
-        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} justifyContent="space-between" gap={2}>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          alignItems={{ md: 'center' }}
+          justifyContent="space-between"
+          gap={2}
+        >
           <Stack spacing={0.5} sx={{ minWidth: 0 }}>
             <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: -0.4 }}>
               Pagos
@@ -492,14 +569,12 @@ export default function PaymentsPage() {
             </Typography>
 
             <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
-              <Chip label={`Registros: ${totals.count}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
+              <Chip label={`Registros: ${meta.total}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
               <Chip
-                label={`Aprobado: ${nfMoneyARS(totals.APPROVED)}`}
-                sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
+                label={`Aprobados: ${payments.filter(p => p.status === 'APPROVED').length}`} sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
               />
               <Chip
-                label={`Pendiente: ${nfMoneyARS(totals.PENDING)}`}
-                sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#f59e0b', 0.14), color: '#b45309' }}
+                label={`Pendientes: ${payments.filter(p => p.status === 'PENDING').length}`} sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#f59e0b', 0.14), color: '#b45309' }}
               />
               {loading && <CircularProgress size={18} />}
             </Stack>
@@ -519,7 +594,7 @@ export default function PaymentsPage() {
             </Button>
 
             <Button
-              onClick={fetchPayments}
+              onClick={() => fetchPayments()}
               disabled={loading}
               sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
             >
@@ -561,7 +636,15 @@ export default function PaymentsPage() {
               const v = typeof value === 'string' ? value : value ? `${value.name} ${value.email} ${value.dni ?? ''}` : '';
               setFilters((f) => ({ ...f, q: v }));
             }}
-            renderInput={(params) => <TextField {...params} label="Buscar (cliente/email/DNI)" size="small" fullWidth />}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Buscar (cliente/email/DNI)"
+                size="small"
+                fullWidth
+                onChange={(e) => setFilters((f) => ({ ...f, q: (e.target as HTMLInputElement).value }))}
+              />
+            )}
             sx={{ flex: 1 }}
           />
 
@@ -604,14 +687,65 @@ export default function PaymentsPage() {
 
           <Button
             variant="outlined"
-            onClick={fetchPayments}
+            onClick={applySearch}
             disabled={loading}
             sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900, minWidth: { xs: '100%', md: 140 } }}
           >
             Buscar
           </Button>
         </Stack>
+
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          gap={1.25}
+          alignItems={{ md: 'center' }}
+          justifyContent="space-between"
+          sx={{ mt: 1.75 }}
+        >
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Página <b>{meta.page}</b> de <b>{meta.pages}</b> • Total: <b>{meta.total}</b>
+          </Typography>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'center' }}>
+            <TextField
+              label="Items"
+              value={String(limit)}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setLimit(Number.isFinite(v) && v > 0 ? v : 25);
+                setPage(1);
+              }}
+              select
+              size="small"
+              sx={{ minWidth: { xs: '100%', sm: 150 } }}
+            >
+              {rowsPerPageOptions.map((n) => (
+                <MenuItem key={n} value={n}>
+                  {n} / pág
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setFilters({ q: '', status: '', from: '', to: '' });
+                setPage(1);
+              }}
+              sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
+              disabled={loading}
+            >
+              Limpiar
+            </Button>
+          </Stack>
+        </Stack>
       </Paper>
+
+      {error && status !== 'error' && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       {/* MOBILE */}
       <Box sx={{ display: { xs: 'block', md: 'none' } }}>
@@ -635,6 +769,29 @@ export default function PaymentsPage() {
           {payments.map((p) => (
             <PaymentCard key={p.id} p={p} />
           ))}
+
+          {/* Paginación mobile */}
+          {meta.pages > 1 && (
+            <Paper
+              variant="outlined"
+              sx={{
+                borderRadius: 4,
+                p: 1.5,
+                borderColor: 'rgba(0,0,0,0.08)',
+                boxShadow: '0 14px 40px rgba(0,0,0,0.06)',
+              }}
+            >
+              <Stack direction="row" justifyContent="center">
+                <Pagination
+                  count={meta.pages}
+                  page={page}
+                  onChange={(_, v) => setPage(v)}
+                  disabled={loading}
+                  shape="rounded"
+                />
+              </Stack>
+            </Paper>
+          )}
         </Stack>
       </Box>
 
@@ -654,14 +811,11 @@ export default function PaymentsPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Cliente</TableCell>
-                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Email</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>DNI</TableCell>
-                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Proveedor</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Método</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Monto</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Estado</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
-                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Comprobante</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Fecha</TableCell>
               </TableRow>
             </TableHead>
@@ -669,7 +823,7 @@ export default function PaymentsPage() {
             <TableBody>
               {!loading && payments.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} sx={{ py: 4 }}>
+                  <TableCell colSpan={7} sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
                       No se encontraron pagos con los filtros aplicados.
                     </Typography>
@@ -687,42 +841,48 @@ export default function PaymentsPage() {
                   }}
                 >
                   <TableCell sx={{ fontWeight: 900 }}>{p.client?.name ?? p.clientId}</TableCell>
-                  <TableCell>{p.client?.email ?? '—'}</TableCell>
-                  <TableCell sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                    {p.client?.dni ?? '—'}
-                  </TableCell>
-                  <TableCell>{p.provider}</TableCell>
+                  <TableCell>{p.client?.dni ?? '—'}</TableCell>
                   <TableCell>{p.method}</TableCell>
                   <TableCell sx={{ fontWeight: 900 }}>
-                    {p.currency?.toUpperCase() === 'ARS' || !p.currency
-                      ? nfMoneyARS(Number(p.amount))
-                      : `${p.amount} ${p.currency}`}
+                    {p.currency?.toUpperCase() === 'ARS' || !p.currency ? nfMoneyARS(Number(p.amount)) : `${p.amount} ${p.currency}`}
                   </TableCell>
                   <TableCell>
                     <StatusChip status={p.status} />
                   </TableCell>
                   <TableCell>{p.branchName ?? '—'}</TableCell>
-                  <TableCell>
-                    {p.receiptUrl ? (
-                      <Button
-                        size="small"
-                        href={p.receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ textTransform: 'none', fontWeight: 900, borderRadius: 2.5 }}
-                      >
-                        Ver
-                      </Button>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
                   <TableCell sx={{ minWidth: 170 }}>{nfDateTime(p.createdAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Footer paginación desktop */}
+        <Box
+          sx={{
+            p: 1.5,
+            borderTop: '1px solid rgba(0,0,0,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Mostrando <b>{payments.length}</b> de <b>{meta.total}</b> • Página <b>{meta.page}</b>/{meta.pages}
+          </Typography>
+
+          {meta.pages > 1 && (
+            <Pagination
+              count={meta.pages}
+              page={page}
+              onChange={(_, v) => setPage(v)}
+              disabled={loading}
+              shape="rounded"
+            />
+          )}
+        </Box>
       </Paper>
 
       {/* Modal crear pago */}
@@ -756,7 +916,7 @@ export default function PaymentsPage() {
               onInputChange={handleClientInputChange}
               onChange={handleClientChange}
               renderInput={(params) => <TextField {...params} label="Cliente (buscar por nombre, mail o DNI)" required />}
-              disabled={isRenewFlow} // opcional: bloqueás cambiar cliente si venís desde renovar
+              disabled={isRenewFlow}
             />
 
             {subscriptionLoading && (
@@ -843,15 +1003,7 @@ export default function PaymentsPage() {
                 ))}
               </TextField>
 
-              <TextField
-                label="Método"
-                name="method"
-                value={form.method}
-                onChange={onChangeForm}
-                select
-                required
-                fullWidth
-              >
+              <TextField label="Método" name="method" value={form.method} onChange={onChangeForm} select required fullWidth>
                 {paymentMethods.map((m) => (
                   <MenuItem key={m} value={m}>
                     {m}
@@ -869,7 +1021,7 @@ export default function PaymentsPage() {
                 onChange={onChangeForm}
                 required
                 fullWidth
-                InputProps={{ readOnly: Boolean(currentSubscription) }} // ✅ sigue bloqueado
+                InputProps={{ readOnly: Boolean(currentSubscription) }}
               />
               <TextField label="Moneda" name="currency" value={form.currency} onChange={onChangeForm} fullWidth />
             </Stack>
@@ -884,7 +1036,13 @@ export default function PaymentsPage() {
 
             <TextField label="Notas" name="notes" value={form.notes} onChange={onChangeForm} fullWidth />
 
-            <TextField label="Comprobante (URL)" name="receiptUrl" value={form.receiptUrl} onChange={onChangeForm} fullWidth />
+            <TextField
+              label="Comprobante (URL)"
+              name="receiptUrl"
+              value={form.receiptUrl}
+              onChange={onChangeForm}
+              fullWidth
+            />
           </DialogContent>
 
           <DialogActions sx={{ px: 3, pb: 2 }}>

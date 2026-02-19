@@ -16,9 +16,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <CssBaseline />
       <Header onMenuClick={handleDrawerToggle} />
       <Sidebar mobileOpen={mobileOpen} handleDrawerToggle={handleDrawerToggle} />
-      <Box component="main" sx={{ flexGrow: 1, p: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Toolbar />
-        {children}
+        <Box sx={{ flexGrow: 1 }}>{children}</Box>
         <Footer />
       </Box>
     </Box>
