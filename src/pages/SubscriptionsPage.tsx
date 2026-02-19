@@ -20,8 +20,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   TextField,
   Typography,
+  Pagination,
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import { alpha } from '@mui/material/styles';
@@ -122,8 +124,10 @@ function SubscriptionCard({
             <Typography sx={{ fontWeight: 900 }} noWrap>
               {sub.client?.name ?? '—'}
             </Typography>
+
+            {/* ✅ Email removido también del card */}
             <Typography variant="body2" sx={{ color: 'text.secondary' }} noWrap>
-              {sub.client?.email ?? '—'} {sub.client?.dni ? `• DNI ${sub.client.dni}` : ''}
+              {sub.client?.dni ? `DNI ${sub.client.dni}` : '—'}
             </Typography>
           </Box>
           <StatusChip status={sub.status || 'PENDIENTE_PAGO'} />
@@ -181,6 +185,12 @@ export default function SubscriptionsPage() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [open, setOpen] = useState(false);
 
+  // ✅ paginación server-side
+  const [page, setPage] = useState(0); // 0-based UI
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+
   // form create
   const [form, setForm] = useState({
     clientId: '',
@@ -206,10 +216,8 @@ export default function SubscriptionsPage() {
     branchId: '',
   });
 
-  // ✅ FIX: renewingId con setter
   const [renewingId, setRenewingId] = useState<string>('');
 
-  // ✅ FIX: renovar por subId (no por clientId)
   const [renewModal, setRenewModal] = useState<{
     open: boolean;
     subId: string;
@@ -223,7 +231,6 @@ export default function SubscriptionsPage() {
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewError, setRenewError] = useState('');
 
-  // pago en renovación (opcional si vos lo querés acá)
   const [renewPaymentMethod, setRenewPaymentMethod] = useState<(typeof paymentMethods)[number]>('CASH');
   const [renewPaymentAmount, setRenewPaymentAmount] = useState<string>('');
 
@@ -232,6 +239,7 @@ export default function SubscriptionsPage() {
 
   const loading = status === 'loading';
 
+  // ✅ totales SOLO de la página actual (si querés totales globales, hacemos endpoint /subscriptions/summary)
   const totals = useMemo(() => {
     const t = { count: subs.length, VIGENTE: 0, VENCIDA: 0, PENDIENTE_PAGO: 0, CANCELADA: 0 };
     for (const s of subs) {
@@ -250,25 +258,58 @@ export default function SubscriptionsPage() {
     }
   };
 
-  const fetchSubs = async () => {
+  const fetchSubs = async (opts?: { page?: number; rowsPerPage?: number }) => {
     setStatus('loading');
     setError('');
+
+    const nextPage = opts?.page ?? page; // 0-based
+    const nextRows = opts?.rowsPerPage ?? rowsPerPage;
+
     try {
-      const res = await api.get<Subscription[]>('/subscriptions', {
-        params: { _t: Date.now() },
+      const res = await api.get<any>('/subscriptions', {
+        params: {
+          _t: Date.now(),
+          page: nextPage + 1, // backend 1-based
+          limit: nextRows,
+          q: filters.q || undefined,
+          status: filters.status || undefined,
+          branchId: filters.branchId || undefined,
+        },
         headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0' },
       });
-      setSubs(res.data);
+
+      const payload = res.data;
+
+      // ✅ Normalizar respuesta (paginada o no)
+      const list =
+        Array.isArray(payload?.data) ? payload.data :
+        Array.isArray(payload) ? payload :
+        Array.isArray(payload?.items) ? payload.items :
+        Array.isArray(payload?.results) ? payload.results :
+        [];
+
+      const meta = payload?.meta;
+
+      setSubs(list);
+      setTotal(typeof meta?.total === 'number' ? meta.total : list.length);
+      setPages(typeof meta?.pages === 'number' ? meta.pages : 1);
+
+      setPage(nextPage);
+      setRowsPerPage(nextRows);
+
       setStatus('success');
     } catch {
       setSubs([]);
+      setTotal(0);
+      setPages(1);
       setStatus('error');
       setError('No se pudieron cargar las suscripciones.');
     }
   };
 
   useEffect(() => {
-    fetchSubs();
+    // carga inicial
+    fetchSubs({ page: 0 });
     fetchBranches();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
@@ -282,7 +323,6 @@ export default function SubscriptionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // autocomplete create
   const handleClientInputChange = async (_: any, value: string) => {
     setClientSearch(value);
     if (!value) {
@@ -343,7 +383,7 @@ export default function SubscriptionsPage() {
         startDate: new Date(form.startDate).toISOString(),
       });
 
-      await fetchSubs();
+      await fetchSubs({ page: 0 });
       setOpen(false);
       resetForm();
     } catch (err: any) {
@@ -365,7 +405,6 @@ export default function SubscriptionsPage() {
       currentPlanId: sub.plan.id,
     });
 
-    // default plan = plan actual
     setRenewPlanId(sub.plan.id);
 
     try {
@@ -373,7 +412,6 @@ export default function SubscriptionsPage() {
       const list = res.data || [];
       setRenewPlans(list);
 
-      // setear monto por precio del plan seleccionado (si existe)
       const initialPlan = list.find((p) => p.id === sub.plan.id) ?? list[0];
       if (initialPlan) {
         setRenewPlanId(initialPlan.id);
@@ -397,11 +435,9 @@ export default function SubscriptionsPage() {
     setRenewError('');
 
     try {
-      // 1) renovar (backend devuelve la NUEVA suscripción creada)
       const res = await api.patch<Subscription>(`/subscriptions/${renewModal.subId}/renew`, { planId: renewPlanId });
       const newSub = res.data;
 
-      // 2) crear pago asociado a la nueva suscripción (aprobado)
       const amountNum = Number(renewPaymentAmount);
       if (!Number.isFinite(amountNum) || amountNum <= 0) {
         throw new Error('El monto del pago es inválido.');
@@ -425,9 +461,7 @@ export default function SubscriptionsPage() {
       setRenewPaymentMethod('CASH');
       setRenewingId('');
 
-      await fetchSubs();
-
-      // por si querés refrescar / payments luego
+      await fetchSubs(); // mantiene página actual
       navigate('/subscriptions', { replace: true });
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.message ?? 'Error al renovar suscripción.';
@@ -436,33 +470,6 @@ export default function SubscriptionsPage() {
       setRenewLoading(false);
     }
   };
-
-  const filtered = useMemo(() => {
-    const q = filters.q.trim().toLowerCase();
-
-    return subs.filter((s) => {
-      const st = s.status || 'PENDIENTE_PAGO';
-      const okStatus = filters.status ? st === filters.status : true;
-      const okBranch = filters.branchId ? s.branchId === filters.branchId : true;
-
-      const hay = [
-        s.client?.name,
-        s.client?.email,
-        s.client?.dni,
-        s.branch?.name,
-        s.plan?.name,
-        st,
-        isoToYmd(s.startDate),
-        isoToYmd(s.endDate),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      const okQ = q ? hay.includes(q) : true;
-      return okStatus && okBranch && okQ;
-    });
-  }, [subs, filters]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1250, mx: 'auto' }}>
@@ -489,8 +496,10 @@ export default function SubscriptionsPage() {
             </Typography>
 
             <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
-              <Chip label={`Registros: ${totals.count}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
+              {/* ✅ total real (server) */}
+              <Chip label={`Registros: ${total}`} sx={{ fontWeight: 900, borderRadius: 999 }} />
 
+              {/* ✅ estos son sobre la página actual */}
               <Chip
                 label={`Vigentes: ${totals.VIGENTE}`}
                 sx={{ fontWeight: 900, borderRadius: 999, backgroundColor: alpha('#10b981', 0.12), color: '#0f766e' }}
@@ -523,7 +532,7 @@ export default function SubscriptionsPage() {
 
             <Button
               startIcon={<RefreshIcon />}
-              onClick={fetchSubs}
+              onClick={() => fetchSubs()}
               disabled={loading}
               sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900 }}
             >
@@ -552,7 +561,7 @@ export default function SubscriptionsPage() {
       >
         <Stack direction={{ xs: 'column', md: 'row' }} gap={1.25} alignItems={{ md: 'center' }}>
           <TextField
-            label="Buscar (cliente/email/DNI/plan/sucursal)"
+            label="Buscar (cliente/DNI/plan/sucursal)"
             value={filters.q}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
             size="small"
@@ -598,7 +607,7 @@ export default function SubscriptionsPage() {
 
           <Button
             variant="outlined"
-            onClick={fetchSubs}
+            onClick={() => fetchSubs({ page: 0 })}
             disabled={loading}
             sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 900, minWidth: { xs: '100%', md: 140 } }}
           >
@@ -616,7 +625,7 @@ export default function SubscriptionsPage() {
       {/* MOBILE */}
       <Box sx={{ display: { xs: 'block', md: 'none' } }}>
         <Stack spacing={1.5}>
-          {!loading && filtered.length === 0 && (
+          {!loading && subs.length === 0 && (
             <Paper
               variant="outlined"
               sx={{
@@ -632,9 +641,21 @@ export default function SubscriptionsPage() {
             </Paper>
           )}
 
-          {filtered.map((s) => (
+          {subs.map((s) => (
             <SubscriptionCard key={s.id} sub={s} onRenew={handleRenew} renewing={renewingId === s.id} />
           ))}
+
+          {pages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+              <Pagination
+                count={pages}
+                page={page + 1}
+                onChange={(_, p) => fetchSubs({ page: p - 1 })}
+                size="small"
+                shape="rounded"
+              />
+            </Box>
+          )}
         </Stack>
       </Box>
 
@@ -654,7 +675,7 @@ export default function SubscriptionsPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Cliente</TableCell>
-                <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Email</TableCell>
+                {/* ✅ Email eliminado */}
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>DNI</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Sucursal</TableCell>
                 <TableCell sx={{ fontWeight: 900, backgroundColor: 'rgba(0,0,0,0.02)' }}>Plan</TableCell>
@@ -666,9 +687,9 @@ export default function SubscriptionsPage() {
             </TableHead>
 
             <TableBody>
-              {!loading && filtered.length === 0 && (
+              {!loading && subs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} sx={{ py: 4 }}>
+                  <TableCell colSpan={8} sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
                       No se encontraron suscripciones con los filtros aplicados.
                     </Typography>
@@ -676,7 +697,7 @@ export default function SubscriptionsPage() {
                 </TableRow>
               )}
 
-              {filtered.map((s, idx) => (
+              {subs.map((s, idx) => (
                 <TableRow
                   key={s.id}
                   hover
@@ -686,10 +707,11 @@ export default function SubscriptionsPage() {
                   }}
                 >
                   <TableCell sx={{ fontWeight: 900 }}>{s.client?.name ?? '—'}</TableCell>
-                  <TableCell>{s.client?.email ?? '—'}</TableCell>
+
                   <TableCell sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
                     {s.client?.dni ?? '—'}
                   </TableCell>
+
                   <TableCell>{s.branch?.name ?? '—'}</TableCell>
                   <TableCell>{s.plan?.name ?? '—'}</TableCell>
                   <TableCell sx={{ minWidth: 170 }}>{nfDate(s.startDate)}</TableCell>
@@ -717,6 +739,21 @@ export default function SubscriptionsPage() {
             </TableBody>
           </Table>
         </TableContainer>
+
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          onPageChange={(_, newPage) => fetchSubs({ page: newPage })}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            const next = parseInt(e.target.value, 10) || 25;
+            fetchSubs({ page: 0, rowsPerPage: next });
+          }}
+          rowsPerPageOptions={[10, 25, 50, 100]}
+          labelRowsPerPage="Filas"
+          labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+        />
       </Paper>
 
       {/* Modal crear suscripción */}
@@ -868,12 +905,7 @@ export default function SubscriptionsPage() {
               ))}
             </TextField>
 
-            <TextField
-              label="Monto"
-              value={renewPaymentAmount}
-              InputProps={{ readOnly: true }}
-              fullWidth
-            />
+            <TextField label="Monto" value={renewPaymentAmount} InputProps={{ readOnly: true }} fullWidth />
 
             <TextField
               select
