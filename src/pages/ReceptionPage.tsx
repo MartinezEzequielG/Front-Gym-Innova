@@ -181,7 +181,10 @@ const ReceptionPage: React.FC = () => {
       timeoutRef.current = setTimeout(() => resetForm(true), AUTO_RESET_MS);
     }
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -605,9 +608,9 @@ const ReceptionPage: React.FC = () => {
       <Dialog
         open={modalOpen}
         onClose={handleCloseModal}
+        keepMounted
         maxWidth="md"
         fullWidth
-        keepMounted
         PaperProps={{
           sx: {
             bgcolor: 'rgba(0,0,0,0.95)',
