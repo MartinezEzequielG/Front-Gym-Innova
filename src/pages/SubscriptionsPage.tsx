@@ -98,6 +98,21 @@ function StatusChip({ status }: { status: SubscriptionStatus }) {
   );
 }
 
+function canRenew(sub: Subscription) {
+  // Caso normal
+  if (sub.status === 'VENCIDA') return true;
+
+  // ✅ Caso "vence hoy": permitimos renovar aunque aún figure VIGENTE/PENDIENTE
+  const end = new Date(sub.endDate);
+  if (Number.isNaN(end.getTime())) return false;
+
+  const now = new Date();
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+
+  // Si termina antes de mañana => vence hoy o ya venció
+  return end < startOfTomorrow;
+}
+
 function SubscriptionCard({
   sub,
   onRenew,
@@ -158,7 +173,7 @@ function SubscriptionCard({
           <Chip size="small" label={`Fin: ${isoToYmd(sub.endDate)}`} sx={{ borderRadius: 999, fontWeight: 900 }} />
         </Stack>
 
-        {sub.status === 'VENCIDA' ? (
+        {canRenew(sub) ? (
           <Button
             size="small"
             variant="outlined"
@@ -720,7 +735,7 @@ export default function SubscriptionsPage() {
                     <StatusChip status={s.status || 'PENDIENTE_PAGO'} />
                   </TableCell>
                   <TableCell>
-                    {s.status === 'VENCIDA' ? (
+                    {canRenew(s) ? (
                       <Button
                         size="small"
                         variant="outlined"
