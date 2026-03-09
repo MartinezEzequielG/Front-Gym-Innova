@@ -102,15 +102,44 @@ function canRenew(sub: Subscription) {
   // Caso normal
   if (sub.status === 'VENCIDA') return true;
 
-  // ✅ Caso "vence hoy": permitimos renovar aunque aún figure VIGENTE/PENDIENTE
   const end = new Date(sub.endDate);
   if (Number.isNaN(end.getTime())) return false;
 
-  const now = new Date();
-  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  // ✅ Ventana: permitir renovar hasta 3 días antes (día AR)
+  const tz = 'America/Argentina/Buenos_Aires';
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-  // Si termina antes de mañana => vence hoy o ya venció
-  return end < startOfTomorrow;
+  const ymdInTZ = (d: Date) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d);
+
+    const y = parts.find((p) => p.type === 'year')?.value ?? '0000';
+    const m = parts.find((p) => p.type === 'month')?.value ?? '00';
+    const day = parts.find((p) => p.type === 'day')?.value ?? '00';
+    return `${y}-${m}-${day}`;
+  };
+
+  const ymdToUtcMidnight = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map((n) => Number(n));
+    if (!y || !m || !d) return new Date(NaN);
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  };
+
+  const todayYmd = ymdInTZ(new Date());
+  const endYmd = ymdInTZ(end);
+
+  const todayUtc = ymdToUtcMidnight(todayYmd);
+  const endUtc = ymdToUtcMidnight(endYmd);
+  if (Number.isNaN(todayUtc.getTime()) || Number.isNaN(endUtc.getTime())) return false;
+
+  const diffDays = Math.floor((endUtc.getTime() - todayUtc.getTime()) / MS_PER_DAY);
+
+  // diffDays: 0 = vence hoy, 1/2/3 = vence en 1/2/3 días, negativo = ya venció
+  return diffDays <= 3;
 }
 
 function SubscriptionCard({
