@@ -49,7 +49,8 @@ api.interceptors.response.use(
 interface User {
   id: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENT' | 'STAFF';
+  role: 'ADMIN' | 'EMPLOYEE' | 'ACCOUNTANT' | 'CLIENT' | string;
+  branchId: string | null;
   // Otros campos según el modelo del backend
 }
 

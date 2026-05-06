@@ -395,12 +395,22 @@ export default function SubscriptionsPage() {
       return;
     }
     try {
-      const res = await api.get<Plan[]>(`/plans/by-branch/${branchId}`);
+      // ✅ usar endpoint estándar
+      const res = await api.get<Plan[]>('/plans', { params: { branchId } });
       setPlans(res.data);
     } catch {
       setPlans([]);
     }
   };
+
+  useEffect(() => {
+    if (open && !form.branchId && branches.length === 1) {
+      const only = branches[0];
+      setForm((f) => ({ ...f, branchId: only.id, planId: '' }));
+      fetchPlansByBranch(only.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, branches]);
 
   const resetForm = () => {
     setForm({ clientId: '', branchId: '', planId: '', startDate: '' });
@@ -452,7 +462,8 @@ export default function SubscriptionsPage() {
     setRenewPlanId(sub.plan.id);
 
     try {
-      const res = await api.get<Plan[]>(`/plans/by-branch/${sub.branchId}`);
+      // ✅ usar endpoint estándar
+      const res = await api.get<Plan[]>('/plans', { params: { branchId: sub.branchId } });
       const list = res.data || [];
       setRenewPlans(list);
 

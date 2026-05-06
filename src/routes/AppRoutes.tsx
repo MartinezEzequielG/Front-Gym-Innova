@@ -14,6 +14,7 @@ import PlansPage from '../pages/PlansPage';
 import ReceptionPage from '../pages/ReceptionPage';
 import BranchesPage from '../pages/BranchesPage';
 import CashPage from '../pages/cash/CashPage';
+import AdminUsersPage from '../pages/admin/UsersPage';
 
 import { Box, CircularProgress } from '@mui/material';
 
@@ -119,6 +120,14 @@ export const AppRoutes = () => (
       path="/reception"
       element={
           <ReceptionPage />
+      }
+    />
+    <Route
+      path="/admin/users"
+      element={
+        <PrivateRoute>
+          <AdminUsersPage />
+        </PrivateRoute>
       }
     />
   </Routes>
